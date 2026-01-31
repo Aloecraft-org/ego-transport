@@ -31,6 +31,14 @@ path = "src/bin/test_websocket_wasi_client.rs"
 name = "test_websocket_browser"
 path = "src/bin/test_websocket_browser.rs"
 
+[[bin]]
+name = "test_auto_detect_native"
+path = "src/bin/test_auto_detect_native.rs"
+
+[[bin]]
+name = "test_auto_detect_wasi_server"
+path = "src/bin/test_auto_detect_wasi_server.rs"
+
 [dependencies]
 async-trait = "0.1.89"
 # === Core (all platforms) ===

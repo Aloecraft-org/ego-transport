@@ -174,6 +174,21 @@ test_ws_browser: test_ws_browser_build
 	@echo "==================================="
 
 # ===========================================
+# AutoDetectListener Tests
+# ===========================================
+
+test_auto_detect_native:
+	cargo run --bin test_auto_detect_native
+
+test_auto_detect_wasi_server:
+	cargo build --bin test_auto_detect_wasi_server                       
+	cargo build --target wasm32-wasip2 --bin test_auto_detect_wasi_server
+	wasmtime run --wasi inherit-network target/wasm32-wasip2/debug/test_auto_detect_wasi_server.wasm & ./target/debug/test_auto_detect_wasi_server
+# 	cargo run --bin test_auto_detect_wasi_server --target wasm32-wasip2 & sleep 1
+# 	cargo run --bin test_auto_detect_wasi_server --target wasm32-wasip2
+
+
+# ===========================================
 # COMPREHENSIVE TEST SUITES
 # ===========================================
 

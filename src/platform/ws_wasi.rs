@@ -67,7 +67,7 @@ impl WebSocketWasi {
         Ok(Self { ws })
     }
     
-    /// Accept a WebSocket connection from a TCP stream
+    /// Accept a WebSocket connection from a raw TCP stream.
     pub async fn accept(tcp_stream: TcpStreamWasi) -> Result<Self, TransportError> {
         log::info!("[WS WASI] Accepting WebSocket connection");
         
@@ -78,6 +78,32 @@ impl WebSocketWasi {
         
         log::info!("[WS WASI] WebSocket handshake complete");
         
+        Ok(Self { ws })
+    }
+
+    /// Accept a WebSocket connection from a TCP stream where `prefix` bytes have
+    /// already been consumed (e.g., during protocol auto-detection).
+    ///
+    /// The prefix bytes are replayed through `WasiSyncStream` so that tungstenite
+    /// sees the complete HTTP upgrade request. On WASI, streams have no `peek()`
+    /// support, so `AutoDetectListener` reads the first few bytes to sniff the
+    /// protocol and must replay them for the handshake to succeed.
+    pub async fn accept_with_prefix(
+        tcp_stream: TcpStreamWasi,
+        prefix: Vec<u8>,
+    ) -> Result<Self, TransportError> {
+        log::info!(
+            "[WS WASI] Accepting WebSocket connection ({} prefix bytes)",
+            prefix.len()
+        );
+
+        let sync_stream = WasiSyncStream::with_prefix(tcp_stream, prefix);
+
+        let ws = accept(sync_stream)
+            .map_err(|e| TransportError::Protocol(format!("WebSocket handshake failed: {}", e)))?;
+
+        log::info!("[WS WASI] WebSocket handshake complete");
+
         Ok(Self { ws })
     }
 }

@@ -1,10 +1,14 @@
 mod tcp;
 mod websocket;
+mod buffered;
 
 pub enum TransportKind {
     Tcp,
     WebSocket,
 }
+
+#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+pub use buffered::BufferedTransport;
 
 #[derive(Debug)]
 pub enum TransportError {

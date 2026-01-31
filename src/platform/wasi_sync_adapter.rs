@@ -5,24 +5,58 @@ use crate::platform::tcp_wasi::TcpStreamWasi;
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
 use std::io::{self, Read, Write};
 
-/// Sync wrapper around async TcpStreamWasi
+/// Sync wrapper around async TcpStreamWasi.
+///
+/// Implements `std::io::Read` and `std::io::Write` so that synchronous libraries
+/// (like `tungstenite`) can operate over WASI streams.
+///
+/// An optional `prefix` buffer supports protocol auto-detection: when initial bytes
+/// are consumed during detection, they are stored here and delivered to the reader
+/// before any bytes are read from the underlying stream.
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
 pub struct WasiSyncStream {
-    // Remove Rc<RefCell<>> - just own it directly
     inner: TcpStreamWasi,
+    /// Bytes to deliver before reading from the inner stream.
+    /// Populated by `with_prefix()` when bytes were consumed during protocol detection.
+    /// Empty in the normal (non-detection) case.
+    prefix: Vec<u8>,
 }
 
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
 impl WasiSyncStream {
+    /// Create a sync stream with no prefix (standard usage).
     pub fn new(stream: TcpStreamWasi) -> Self {
-        Self { inner: stream }
+        Self {
+            inner: stream,
+            prefix: Vec::new(),
+        }
+    }
+
+    /// Create a sync stream that delivers `prefix` bytes before reading from the
+    /// inner stream. Used by `AutoDetectListener` on WASI: the detection bytes
+    /// (e.g., "GET ") are consumed during protocol sniffing and must be replayed
+    /// so that tungstenite sees the complete HTTP upgrade request.
+    pub fn with_prefix(stream: TcpStreamWasi, prefix: Vec<u8>) -> Self {
+        Self {
+            inner: stream,
+            prefix,
+        }
     }
 }
 
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
 impl Read for WasiSyncStream {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        // Direct access, no borrow_mut needed
+        // Drain prefix bytes first. If the caller's buffer is smaller than the
+        // remaining prefix we deliver a partial chunk and retain the rest.
+        if !self.prefix.is_empty() {
+            let n = self.prefix.len().min(buf.len());
+            buf[..n].copy_from_slice(&self.prefix[..n]);
+            self.prefix.drain(..n);
+            return Ok(n);
+        }
+
+        // Prefix fully drained — read directly from the inner WASI stream.
         loop {
             match self.inner.input.read(buf.len() as u64) {
                 Ok(data) => {
@@ -48,7 +82,7 @@ impl Read for WasiSyncStream {
                             } else {
                                 return Err(io::Error::new(
                                     io::ErrorKind::Other,
-                                    format!("WASI stream error: {}", error_str)
+                                    format!("WASI stream error: {}", error_str),
                                 ));
                             }
                         }
@@ -73,7 +107,7 @@ impl Write for WasiSyncStream {
                         StreamError::Closed => {
                             return Err(io::Error::new(
                                 io::ErrorKind::BrokenPipe,
-                                "Stream closed"
+                                "Stream closed",
                             ));
                         }
                         StreamError::LastOperationFailed(err) => {
@@ -84,7 +118,7 @@ impl Write for WasiSyncStream {
                             } else {
                                 return Err(io::Error::new(
                                     io::ErrorKind::Other,
-                                    format!("WASI stream error: {}", error_str)
+                                    format!("WASI stream error: {}", error_str),
                                 ));
                             }
                         }
@@ -93,7 +127,7 @@ impl Write for WasiSyncStream {
             }
         }
     }
-    
+
     fn flush(&mut self) -> io::Result<()> {
         loop {
             match self.inner.output.blocking_flush() {
@@ -104,7 +138,7 @@ impl Write for WasiSyncStream {
                         StreamError::Closed => {
                             return Err(io::Error::new(
                                 io::ErrorKind::BrokenPipe,
-                                "Stream closed"
+                                "Stream closed",
                             ));
                         }
                         StreamError::LastOperationFailed(err) => {

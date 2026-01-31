@@ -114,18 +114,21 @@ impl TcpListenerNative {
         
         Ok(Self { inner: listener })
     }
-}
 
-#[cfg(not(target_arch = "wasm32"))]
-#[async_trait]
-impl platform::server::Listener for TcpListenerNative {
-    async fn accept(&self) -> Result<Box<dyn Transport>, TransportError> {
+    /// Accept a raw TCP connection and return the `std::net::TcpStream`.
+    ///
+    /// The stream is set to non-blocking mode before returning. This is the
+    /// shared primitive used by both `accept_websocket()` and `AutoDetectListener`
+    /// — it owns the accept loop so neither caller needs access to the private
+    /// inner listener.
+    pub async fn accept_std(&self) -> Result<std::net::TcpStream, TransportError> {
         loop {
             match self.inner.accept() {
                 Ok((stream, _addr)) => {
-                    stream.set_nonblocking(true)
+                    stream
+                        .set_nonblocking(true)
                         .map_err(TransportError::Io)?;
-                    return Ok(Box::new(TcpStreamNative { inner: stream }));
+                    return Ok(stream);
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                     tokio::task::yield_now().await;
@@ -135,29 +138,28 @@ impl platform::server::Listener for TcpListenerNative {
         }
     }
 }
+
+#[cfg(not(target_arch = "wasm32"))]
+#[async_trait]
+impl platform::server::Listener for TcpListenerNative {
+    async fn accept(&self) -> Result<Box<dyn Transport>, TransportError> {
+        let stream = self.accept_std().await?;
+        Ok(Box::new(TcpStreamNative { inner: stream }))
+    }
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 impl TcpListenerNative {
-    /// Accept a connection and upgrade it to WebSocket
+    /// Accept a connection and upgrade it to WebSocket.
+    ///
+    /// Delegates to `accept_std()` for the raw accept, then converts to a tokio
+    /// stream and performs the tungstenite handshake.
     pub async fn accept_websocket(&self) -> Result<WebSocketNative, TransportError> {
-        // Accept TCP connection
-        loop {
-            match self.inner.accept() {
-                Ok((stream, _addr)) => {
-                    // Convert std::net::TcpStream to tokio::net::TcpStream
-                    stream.set_nonblocking(true)  // Keep non-blocking for conversion
-                        .map_err(TransportError::Io)?;
-                    
-                    let tokio_stream = tokio::net::TcpStream::from_std(stream)
-                        .map_err(TransportError::Io)?;
-                    
-                    // Upgrade to WebSocket
-                    return WebSocketNative::accept(tokio_stream).await;
-                }
-                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                    tokio::task::yield_now().await;
-                }
-                Err(e) => return Err(TransportError::Io(e)),
-            }
-        }
+        let stream = self.accept_std().await?;
+
+        let tokio_stream = tokio::net::TcpStream::from_std(stream)
+            .map_err(TransportError::Io)?;
+
+        WebSocketNative::accept(tokio_stream).await
     }
 }
