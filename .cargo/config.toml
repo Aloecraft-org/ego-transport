@@ -1,0 +1,8 @@
+[target.wasm32-wasip2]
+runner = "wasmtime run -S inherit-network --env TMPDIR=/tmp --dir /tmp::/tmp"
+
+# FIXME: wasip2 is still considered unstable. Get rid of this as soon as there's an upgrade
+rustflags = [
+    "-C", "target-feature=+bulk-memory,+mutable-globals",
+    "--cfg", "wasi_ext"
+]

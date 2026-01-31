@@ -1,0 +1,71 @@
+[package]
+name = "aloeclient"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "aloeclient"
+path = "src/lib.rs"
+
+[[bin]]
+name = "test_network_wasi_client"
+path = "src/bin/test_network_wasi_client.rs"
+
+[[bin]]
+name = "test_network_wasi_server"
+path = "src/bin/test_network_wasi_server.rs"
+
+[[bin]]
+name = "test_server"
+path = "src/bin/test_server.rs"
+
+[[bin]]
+name = "test_websocket_native"
+path = "src/bin/test_websocket_native.rs"
+
+[[bin]]
+name = "test_websocket_wasi_client"
+path = "src/bin/test_websocket_wasi_client.rs"
+
+[[bin]]
+name = "test_websocket_browser"
+path = "src/bin/test_websocket_browser.rs"
+
+[dependencies]
+async-trait = "0.1.89"
+# === Core (all platforms) ===
+log = "0.4"
+futures = "0.3"
+
+# === Native only ===
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { version = "1", features = ["full"] }
+tokio-tungstenite = "0.24"  # Add this
+tungstenite = { version = "0.24", default-features = false }
+env_logger = "0.11"
+
+# === WASI P2 only ===
+[target.'cfg(all(target_arch = "wasm32", target_env = "p2"))'.dependencies]
+tokio = { version = "1", features = ["sync", "macros", "io-util", "rt", "time"] }
+wasi-preview2-prototype = "0.0.3"
+wasip2 = "1.0.2"
+tungstenite = { version = "0.24", features = ["handshake"] }
+# Note: May need to verify tungstenite WASI P2 compatibility
+
+# === Browser only ===
+[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+console_error_panic_hook = "0.1"
+web-sys = { version = "0.3", features = [
+    "WebSocket",
+    "MessageEvent",
+    "ErrorEvent",
+    "CloseEvent",
+    "BinaryType",
+
+] }
+gloo-timers = { version = "0.3", features = ["futures"] }
+js-sys = "0.3"
+
+console_log = "1"
