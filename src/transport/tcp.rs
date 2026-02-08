@@ -1,4 +1,6 @@
 
+use std::fmt::format;
+
 use crate::transport::{TransportKind, TransportError, Transport};
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -27,7 +29,7 @@ pub async fn connect(addr: &str, kind: TransportKind) -> Result<Box<dyn Transpor
         return Ok(Box::new(WebSocketBrowser::connect(addr).await?));
     }
 
-    Err(TransportError::Unsupported)
+    Err(TransportError::Unsupported(format!("{:?}",kind)))
 }
 
 pub async fn connect_tcp(addr: &str) -> Result<Box<dyn Transport>, TransportError> {
@@ -38,5 +40,5 @@ pub async fn connect_tcp(addr: &str) -> Result<Box<dyn Transport>, TransportErro
     return Ok(Box::new(TcpStreamWasi::connect(addr).await?));
     
     #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-    return Err(TransportError::Unsupported);
+    return Err(TransportError::Unsupported("TCP Not Supported For This Action On Browser".to_string()));
 }

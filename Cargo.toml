@@ -44,6 +44,11 @@ async-trait = "0.1.89"
 # === Core (all platforms) ===
 log = "0.4"
 futures = "0.3"
+tokio = { version = "1", default-features = false }
+
+# === WASM Common (Both CLI and Browser) ===
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+tokio = { version = "1", features = ["sync", "macros", "io-util", "rt", "time"] }
 
 # === Native only ===
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
@@ -77,3 +82,7 @@ gloo-timers = { version = "0.3", features = ["futures"] }
 js-sys = "0.3"
 
 console_log = "1"
+
+# Test dependencies
+[dev-dependencies]
+tokio-test = "0.4"
