@@ -72,7 +72,6 @@ async fn run_ws_server(addr: &str) {
                             }
                         }
                     }
-                    
                     log::info!("[WS Server] Handler finished ({} messages)", msg_count);
                 });
             }

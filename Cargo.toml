@@ -39,6 +39,10 @@ path = "src/bin/test_auto_detect_native.rs"
 name = "test_auto_detect_wasi_server"
 path = "src/bin/test_auto_detect_wasi_server.rs"
 
+[[bin]]
+name = "test_deadlock"
+path = "src/bin/test_deadlock.rs"
+
 [dependencies]
 async-trait = "0.1.89"
 # === Core (all platforms) ===

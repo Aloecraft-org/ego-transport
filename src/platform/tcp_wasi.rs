@@ -1,4 +1,3 @@
-use crate::platform::sleep::sleep;
 use crate::transport::{Transport, TransportError};
 
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
@@ -84,8 +83,7 @@ impl TcpStreamWasi {
                     // Check the error type
                     match e {
                         wasip2::sockets::network::ErrorCode::WouldBlock => {
-                            // Wait on the pollable
-                            poll(&[&pollable]);
+                            crate::platform::sleep::sleep(Duration::from_millis(1)).await;
                             continue;
                         }
                         _ => {
@@ -198,10 +196,9 @@ impl Transport for TcpStreamWasi {
                     }
                     StreamError::LastOperationFailed(err) => {
                         let error_str = err.to_debug_string();
-                        if error_str.contains("would-block") {
-                            log::debug!("[WASI TCP] Write would block, yielding");
-                            sleep(Duration::from_millis(1)).await;
-                            continue;
+                            if error_str.contains("would-block") {
+                                crate::platform::sleep::sleep(Duration::from_millis(1)).await;
+                                continue;
                         } else {
                             return Err(TransportError::Protocol(format!(
                                 "Write error: {}",
@@ -218,80 +215,45 @@ impl Transport for TcpStreamWasi {
         // The stream will flush on its own
         log::debug!("[WASI TCP] Write complete (flush skipped)");
 
-        // // Flush the output stream
-        // match self.output.blocking_flush() {
-        //     Ok(_) => {
-        //         log::debug!("[WASI TCP] Flushed output stream");
-        //     }
-        //     Err(e) => {
-        //         match e {
-        //             StreamError::Closed => {
-        //                 return Err(TransportError::Closed);
-        //             }
-        //             StreamError::LastOperationFailed(_) => {
-        //                 // Ignore flush errors for now
-        //             }
-        //         }
-        //     }
-        // }
-
         Ok(())
     }
     async fn recv(&mut self, buf: &mut [u8]) -> Result<usize, TransportError> {
-        log::debug!("[WASI TCP] recv() called, buffer size: {}", buf.len());
-
-        // Try multiple times before giving up
-        let mut attempts = 0;
-        const MAX_ATTEMPTS: u32 = 100;
-
         loop {
-            log::debug!("[WASI TCP] recv() attempt #{}", attempts + 1);
             match self.input.read(buf.len() as u64) {
                 Ok(data) => {
                     if data.is_empty() {
-                        attempts += 1;
-                        if attempts >= MAX_ATTEMPTS {
-                            // Truly no data after many attempts
-                            log::info!(
-                                "[WASI TCP] Connection closed (no data after {} attempts)",
-                                attempts
-                            );
-                            return Err(TransportError::Closed);
-                        }
-                        // Empty read might just mean no data yet, retry
-                        log::debug!("[WASI TCP] Empty read (attempt {}), retrying...", attempts);
-                        sleep(Duration::from_millis(10)).await;
+                        crate::platform::sleep::sleep(Duration::from_millis(1)).await;
                         continue;
                     }
-
-                    // Got data!
                     let n = data.len().min(buf.len());
                     buf[..n].copy_from_slice(&data[..n]);
-                    log::debug!("[WASI TCP] Read {} bytes", n);
                     return Ok(n);
                 }
-                Err(e) => match e {
-                    StreamError::Closed => {
-                        log::info!("[WASI TCP] Connection closed");
-                        return Err(TransportError::Closed);
-                    }
-                    StreamError::LastOperationFailed(err) => {
-                        let error_str = err.to_debug_string();
-                        if error_str.contains("would-block") {
-                            log::debug!("[WASI TCP] Read would block, yielding");
-                            sleep(Duration::from_millis(10)).await;
-                            continue;
-                        } else if error_str.contains("closed") {
+                Err(e) => {
+                    // Handle errors...
+                    match e {
+                        StreamError::Closed => {
                             log::info!("[WASI TCP] Connection closed");
                             return Err(TransportError::Closed);
-                        } else {
-                            return Err(TransportError::Protocol(format!(
-                                "Read error: {}",
-                                error_str
-                            )));
+                        }
+                        StreamError::LastOperationFailed(err) => {
+                            let error_str = err.to_debug_string();
+
+                            if err.to_debug_string().contains("would-block") {
+                                crate::platform::sleep::sleep(Duration::from_millis(1)).await;
+                                continue;
+                            }else if error_str.contains("closed") {
+                                log::info!("[WASI TCP] Connection closed");
+                                return Err(TransportError::Closed);
+                            } else {
+                                return Err(TransportError::Protocol(format!(
+                                    "Read error: {}",
+                                    error_str
+                                )));
+                            }
                         }
                     }
-                },
+                }
             }
         }
     }
@@ -363,7 +325,7 @@ impl TcpListenerWasi {
                 }
                 Err(e) => match e {
                     wasip2::sockets::network::ErrorCode::WouldBlock => {
-                        poll(&[&pollable]);
+                        crate::platform::sleep::sleep(Duration::from_millis(5)).await;
                         continue;
                     }
                     _ => {
@@ -389,7 +351,7 @@ impl TcpListenerWasi {
                 }
                 Err(e) => match e {
                     wasip2::sockets::network::ErrorCode::WouldBlock => {
-                        poll(&[&pollable]);
+                        crate::platform::sleep::sleep(Duration::from_millis(10)).await;
                         continue;
                     }
                     _ => {
@@ -406,14 +368,13 @@ impl TcpListenerWasi {
 
     pub async fn accept(&self) -> Result<TcpStreamWasi, TransportError> {
         let pollable = self.inner.subscribe();
-
         loop {
             match self.inner.accept() {
                 Ok((client_socket, input, output)) => {
                     log::info!("[WASI TCP Listener] Connection accepted, streams acquired");
 
-                    // Give the connection a moment to stabilize
-                    sleep(Duration::from_millis(10)).await;
+                    //  Yield to the async executor to give the connection a moment to stabilize
+                    tokio::task::yield_now().await;
 
                     return Ok(TcpStreamWasi {
                         input,
@@ -424,11 +385,12 @@ impl TcpListenerWasi {
                 Err(e) => {
                     match e {
                         wasip2::sockets::network::ErrorCode::WouldBlock => {
-                            // No connection yet, wait
-                            poll(&[&pollable]);
+                            use crate::platform;
+                            platform::sleep::sleep(Duration::from_millis(10)).await;
                             continue;
                         }
                         _ => {
+                            log::info!("TransportError");
                             return Err(TransportError::Protocol(format!(
                                 "Accept failed: {:?}",
                                 e
