@@ -17,6 +17,12 @@ pub struct TcpStreamNative {
 
 #[cfg(not(target_arch = "wasm32"))]
 impl TcpStreamNative {
+
+    /// Get the remote peer address
+    pub fn peer_addr(&self) -> Option<std::net::SocketAddr> {
+        self.inner.peer_addr().ok()
+    }
+
     pub async fn connect(addr: &str) -> Result<Self, TransportError> {
         // Try to connect with backoff
         let stream = loop {
@@ -128,6 +134,9 @@ impl TcpListenerNative {
                     stream
                         .set_nonblocking(true)
                         .map_err(TransportError::Io)?;
+
+                        log::info!("[TCP Native] Accepting TCP connection from {:?}",stream.peer_addr());
+
                     return Ok(stream);
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {

@@ -15,10 +15,18 @@ use tungstenite::{
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
 pub struct WebSocketWasi {
     ws: WebSocket<WasiSyncStream>,
+    peer_addr: Option<String>,
 }
 
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
 impl WebSocketWasi {
+
+    /// Get the remote peer address from the underlying TCP stream
+    pub fn peer_addr(&self) -> Option<String> {
+        // We'll have this if we're the listener, not if we're the initiator
+        self.peer_addr.clone()
+    }
+
     /// Connect to a WebSocket server
     pub async fn connect(url: &str) -> Result<Self, TransportError> {
         log::info!("[WS WASI] Connecting to {}", url);
@@ -64,21 +72,19 @@ impl WebSocketWasi {
         
         log::info!("[WS WASI] Connected successfully");
         
-        Ok(Self { ws })
+        Ok(Self { ws, peer_addr: None })
     }
     
     /// Accept a WebSocket connection from a raw TCP stream.
     pub async fn accept(tcp_stream: TcpStreamWasi) -> Result<Self, TransportError> {
-        log::info!("[WS WASI] Accepting WebSocket connection");
-        
+        let peer_addr = tcp_stream.peer_addr();
+
+        log::info!("[WS WASI] Accepting WebSocket connection from {:?}", peer_addr);
         let sync_stream = WasiSyncStream::new(tcp_stream);
-        
         let ws = accept(sync_stream)
             .map_err(|e| TransportError::Protocol(format!("WebSocket handshake failed: {}", e)))?;
-        
         log::info!("[WS WASI] WebSocket handshake complete");
-        
-        Ok(Self { ws })
+        Ok(Self { ws, peer_addr })
     }
 
     /// Accept a WebSocket connection from a TCP stream where `prefix` bytes have
@@ -92,9 +98,10 @@ impl WebSocketWasi {
         tcp_stream: TcpStreamWasi,
         prefix: Vec<u8>,
     ) -> Result<Self, TransportError> {
+        let peer_addr = tcp_stream.peer_addr();
         log::info!(
-            "[WS WASI] Accepting WebSocket connection ({} prefix bytes)",
-            prefix.len()
+            "[WS WASI] Accepting WebSocket connection from {:?} ({} prefix bytes)",
+            peer_addr, prefix.len()
         );
 
         let sync_stream = WasiSyncStream::with_prefix(tcp_stream, prefix);
@@ -104,7 +111,7 @@ impl WebSocketWasi {
 
         log::info!("[WS WASI] WebSocket handshake complete");
 
-        Ok(Self { ws })
+        Ok(Self { ws, peer_addr })
     }
 }
 
@@ -131,6 +138,7 @@ impl Transport for WebSocketWasi {
         log::debug!("[WS WASI] Waiting for message");
         
         loop {
+            tokio::task::yield_now().await;
             match self.ws.read() {
                 Ok(message) => {
                     match message {
@@ -164,9 +172,13 @@ impl Transport for WebSocketWasi {
                         }
                     }
                 }
+                Err(tungstenite::Error::Io(e)) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    // No data available, yield and retry
+                    tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+                    continue;
+                }
                 Err(e) => {
-                    log::error!("[WS WASI] Receive error: {}", e);
-                    return Err(TransportError::Protocol(format!("WebSocket error: {}", e)));
+                    return Err(TransportError::Protocol(format!("WebSocket read failed: {}", e)));
                 }
             }
         }

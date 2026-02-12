@@ -61,8 +61,7 @@ impl Read for WasiSyncStream {
             match self.inner.input.read(buf.len() as u64) {
                 Ok(data) => {
                     if data.is_empty() {
-                        std::thread::yield_now();
-                        continue;
+                        return Err(io::Error::new(io::ErrorKind::WouldBlock, "No data available"));
                     }
                     let n = data.len().min(buf.len());
                     buf[..n].copy_from_slice(&data[..n]);
@@ -77,8 +76,7 @@ impl Read for WasiSyncStream {
                         StreamError::LastOperationFailed(err) => {
                             let error_str = err.to_debug_string();
                             if error_str.contains("would-block") {
-                                std::thread::yield_now();
-                                continue;
+                                return Err(io::Error::new(io::ErrorKind::WouldBlock, error_str));
                             } else {
                                 return Err(io::Error::new(
                                     io::ErrorKind::Other,

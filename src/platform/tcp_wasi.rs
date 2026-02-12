@@ -29,6 +29,46 @@ pub struct TcpListenerWasi {
 
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
 impl TcpStreamWasi {
+
+    /// Get the remote peer address
+    pub fn peer_addr(&self) -> Option<String> {
+        use wasip2::sockets::tcp::TcpSocket;
+
+        // WASI P2 provides remote_address() on the socket
+        match self.inner.remote_address() {
+            Ok(addr) => {
+                // Convert IpSocketAddress to string
+                let addr_str = match addr {
+                    wasip2::sockets::network::IpSocketAddress::Ipv4(v4) => {
+                        format!(
+                            "{}.{}.{}.{}:{}",
+                            v4.address.0, v4.address.1, v4.address.2, v4.address.3, v4.port
+                        )
+                    }
+                    wasip2::sockets::network::IpSocketAddress::Ipv6(v6) => {
+                        format!(
+                            "[{:x}:{:x}:{:x}:{:x}:{:x}:{:x}:{:x}:{:x}]:{}",
+                            v6.address.0,
+                            v6.address.1,
+                            v6.address.2,
+                            v6.address.3,
+                            v6.address.4,
+                            v6.address.5,
+                            v6.address.6,
+                            v6.address.7,
+                            v6.port
+                        )
+                    }
+                };
+                Some(addr_str)
+            }
+            Err(e) => {
+                log::warn!("Failed to get remote address: {:?}", e);
+                None
+            }
+        }
+    }
+
     pub async fn connect(addr: &str) -> Result<Self, TransportError> {
         log::info!("[WASI TCP] Attempting to connect to {}", addr);
 
@@ -196,9 +236,9 @@ impl Transport for TcpStreamWasi {
                     }
                     StreamError::LastOperationFailed(err) => {
                         let error_str = err.to_debug_string();
-                            if error_str.contains("would-block") {
-                                crate::platform::sleep::sleep(Duration::from_millis(1)).await;
-                                continue;
+                        if error_str.contains("would-block") {
+                            crate::platform::sleep::sleep(Duration::from_millis(1)).await;
+                            continue;
                         } else {
                             return Err(TransportError::Protocol(format!(
                                 "Write error: {}",
@@ -242,7 +282,7 @@ impl Transport for TcpStreamWasi {
                             if err.to_debug_string().contains("would-block") {
                                 crate::platform::sleep::sleep(Duration::from_millis(1)).await;
                                 continue;
-                            }else if error_str.contains("closed") {
+                            } else if error_str.contains("closed") {
                                 log::info!("[WASI TCP] Connection closed");
                                 return Err(TransportError::Closed);
                             } else {
@@ -371,33 +411,30 @@ impl TcpListenerWasi {
         loop {
             match self.inner.accept() {
                 Ok((client_socket, input, output)) => {
-                    log::info!("[WASI TCP Listener] Connection accepted, streams acquired");
-
+                    
                     //  Yield to the async executor to give the connection a moment to stabilize
                     tokio::task::yield_now().await;
-
-                    return Ok(TcpStreamWasi {
+                    
+                    let tcp_stream = TcpStreamWasi {
                         input,
                         output,
                         inner: client_socket,
-                    });
+                    };
+                    log::info!("[WASI TCP Listener] Connection accepted from {:?}, streams acquired", tcp_stream.peer_addr());
+
+                    return Ok(tcp_stream);
                 }
-                Err(e) => {
-                    match e {
-                        wasip2::sockets::network::ErrorCode::WouldBlock => {
-                            use crate::platform;
-                            platform::sleep::sleep(Duration::from_millis(10)).await;
-                            continue;
-                        }
-                        _ => {
-                            log::info!("TransportError");
-                            return Err(TransportError::Protocol(format!(
-                                "Accept failed: {:?}",
-                                e
-                            )));
-                        }
+                Err(e) => match e {
+                    wasip2::sockets::network::ErrorCode::WouldBlock => {
+                        use crate::platform;
+                        platform::sleep::sleep(Duration::from_millis(10)).await;
+                        continue;
                     }
-                }
+                    _ => {
+                        log::info!("TransportError");
+                        return Err(TransportError::Protocol(format!("Accept failed: {:?}", e)));
+                    }
+                },
             }
         }
     }
@@ -409,7 +446,6 @@ impl TcpStreamWasi {
         TcpListenerWasi::bind(addr).await
     }
 }
-
 
 // Add this implementation after TcpListenerWasi
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]

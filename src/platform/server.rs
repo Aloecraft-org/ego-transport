@@ -40,18 +40,21 @@ use crate::transport::{Transport, TransportError};
 use std::future::Future;
 
 // Platform-specific imports
-#[cfg(not(target_arch = "wasm32"))]
+// Available on native AND WASI P2 (tokio::spawn works on both)
+#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 use tokio::task::spawn as tokio_spawn;
 
 // Conditionally require Send trait bound
-#[cfg(not(all(target_arch = "wasm32", target_env = "p2")))]
+// Native + WASI P2: require Send (tokio::spawn needs it)
+// Browser: no Send (single-threaded, no spawn)
+#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 pub trait MaybeSend: Send {}
-#[cfg(not(all(target_arch = "wasm32", target_env = "p2")))]
+#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 impl<T: Send> MaybeSend for T {}
 
-#[cfg(all(target_arch = "wasm32", target_env = "p2"))]
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 pub trait MaybeSend {}
-#[cfg(all(target_arch = "wasm32", target_env = "p2"))]
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 impl<T> MaybeSend for T {}
 
 /// Trait for types that can accept connections
@@ -72,8 +75,8 @@ pub enum ServerMode {
     /// Handle connections one at a time (available on all platforms)
     Sequential,
 
-    /// Spawn a task for each connection (native and threaded WASI only)
-    #[cfg(not(target_arch = "wasm32"))]
+    /// Spawn a task for each connection (native and WASI P2)
+    #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
     Concurrent,
 }
 
@@ -83,10 +86,10 @@ impl<L: Listener> ServerBuilder<L> {
     /// - Native: Concurrent by default
     /// - WASI P2: Sequential (only option)
     pub fn new(listener: L) -> Self {
-        #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
         let default_mode = ServerMode::Concurrent;
 
-        #[cfg(target_arch = "wasm32")]
+        #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
         let default_mode = ServerMode::Sequential;
         Self {
             listener,
@@ -110,7 +113,7 @@ impl<L: Listener> ServerBuilder<L> {
     ///
     /// Only available on native and threaded WASI builds.
     /// Each connection is handled in its own tokio task.
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
     pub fn concurrent(mut self) -> Self {
         self.mode = ServerMode::Concurrent;
         self
@@ -146,7 +149,7 @@ impl<L: Listener> ServerBuilder<L> {
                 }
             }
 
-            #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
             ServerMode::Concurrent => {
                 log::info!("Server running in CONCURRENT mode");
                 loop {

@@ -25,6 +25,8 @@ impl log::Log for SimpleLogger {
 static LOGGER: SimpleLogger = SimpleLogger;
 
 pub fn init() {
+    // FIXME: Pretty sure we want the library consumer to init the log...
+    return;
     #[cfg(not(target_arch = "wasm32"))]
     {
         log::set_logger(&LOGGER)
