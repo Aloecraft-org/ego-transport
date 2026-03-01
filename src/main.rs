@@ -1,4 +1,3 @@
-use aloeclient; 
+use aloeclient;
 
-fn main() {
-}
+fn main() {}

@@ -32,39 +32,41 @@ fn main() {
 async fn run_native() {
     platform::init_logging();
     log::info!("=== Native TCP Test Starting ===");
-    
+
     let addr = "127.0.0.1:9999";
-    
+
     // Spawn listener task
     let listener_addr = addr.to_string();
     aloeplatform::spawn(async move {
         log::info!("[Listener] Starting on {}", listener_addr);
-        
-        let listener = TcpListener::bind(&listener_addr)
-            .expect("Failed to bind listener");
-        listener.set_nonblocking(true)
+
+        let listener = TcpListener::bind(&listener_addr).expect("Failed to bind listener");
+        listener
+            .set_nonblocking(true)
             .expect("Failed to set nonblocking");
-        
+
         log::info!("[Listener] Bound successfully, waiting for connections...");
-        
+
         loop {
             match listener.accept() {
                 Ok((stream, peer_addr)) => {
                     log::info!("[Listener] Accepted connection from {}", peer_addr);
-                    
+
                     // Spawn handler for this connection
                     aloeplatform::spawn(async move {
                         let mut transport = TcpStreamNative { inner: stream };
                         transport.inner.set_nonblocking(true).ok();
-                        
+
                         let mut buf = [0u8; 1024];
                         loop {
                             match transport.recv(&mut buf).await {
                                 Ok(n) => {
                                     log::info!("[Listener] Received {} bytes", n);
-                                    log::info!("[Listener] Data: {:?}", 
-                                        String::from_utf8_lossy(&buf[..n]));
-                                    
+                                    log::info!(
+                                        "[Listener] Data: {:?}",
+                                        String::from_utf8_lossy(&buf[..n])
+                                    );
+
                                     // Echo back
                                     if let Err(e) = transport.send(&buf[..n]).await {
                                         log::error!("[Listener] Send error: {:?}", e);
@@ -95,29 +97,29 @@ async fn run_native() {
             }
         }
     });
-    
+
     // Give listener time to start
     aloeplatform::sleep(Duration::from_millis(100)).await;
-    
+
     // Spawn client task
     let client_addr = addr.to_string();
     aloeplatform::spawn(async move {
         log::info!("[Client] Connecting to {}", client_addr);
-        
+
         match TcpStreamNative::connect(&client_addr).await {
             Ok(mut transport) => {
                 log::info!("[Client] Connected successfully!");
-                
+
                 // Send a few test messages
                 for i in 1..=3 {
                     let msg = format!("Hello from client, message #{}", i);
                     log::info!("[Client] Sending: {}", msg);
-                    
+
                     if let Err(e) = transport.send(msg.as_bytes()).await {
                         log::error!("[Client] Send error: {:?}", e);
                         return;
                     }
-                    
+
                     // Receive echo
                     let mut buf = [0u8; 1024];
                     match transport.recv(&mut buf).await {
@@ -130,10 +132,10 @@ async fn run_native() {
                             return;
                         }
                     }
-                    
+
                     aloeplatform::sleep(Duration::from_secs(1)).await;
                 }
-                
+
                 log::info!("[Client] Test complete!");
             }
             Err(e) => {
@@ -141,7 +143,7 @@ async fn run_native() {
             }
         }
     });
-    
+
     // Keep main alive to see the test complete
     for i in 0..10 {
         aloeplatform::sleep(Duration::from_secs(1)).await;
@@ -149,7 +151,7 @@ async fn run_native() {
             log::info!("[Main] Test running...");
         }
     }
-    
+
     log::info!("=== Test Complete ===");
 }
 

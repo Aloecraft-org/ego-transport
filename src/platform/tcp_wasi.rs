@@ -29,7 +29,6 @@ pub struct TcpListenerWasi {
 
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
 impl TcpStreamWasi {
-
     /// Get the remote peer address
     pub fn peer_addr(&self) -> Option<String> {
         use wasip2::sockets::tcp::TcpSocket;
@@ -411,16 +410,18 @@ impl TcpListenerWasi {
         loop {
             match self.inner.accept() {
                 Ok((client_socket, input, output)) => {
-                    
                     //  Yield to the async executor to give the connection a moment to stabilize
                     tokio::task::yield_now().await;
-                    
+
                     let tcp_stream = TcpStreamWasi {
                         input,
                         output,
                         inner: client_socket,
                     };
-                    log::info!("[WASI TCP Listener] Connection accepted from {:?}, streams acquired", tcp_stream.peer_addr());
+                    log::info!(
+                        "[WASI TCP Listener] Connection accepted from {:?}, streams acquired",
+                        tcp_stream.peer_addr()
+                    );
 
                     return Ok(tcp_stream);
                 }

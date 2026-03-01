@@ -1,5 +1,5 @@
 #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
-use log::{Level, Metadata, Record, LevelFilter};
+use log::{Level, LevelFilter, Metadata, Record};
 
 #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 struct SimpleLogger;

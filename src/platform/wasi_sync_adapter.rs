@@ -61,7 +61,10 @@ impl Read for WasiSyncStream {
             match self.inner.input.read(buf.len() as u64) {
                 Ok(data) => {
                     if data.is_empty() {
-                        return Err(io::Error::new(io::ErrorKind::WouldBlock, "No data available"));
+                        return Err(io::Error::new(
+                            io::ErrorKind::WouldBlock,
+                            "No data available",
+                        ));
                     }
                     let n = data.len().min(buf.len());
                     buf[..n].copy_from_slice(&data[..n]);
@@ -103,10 +106,7 @@ impl Write for WasiSyncStream {
                     use wasip2::io::streams::StreamError;
                     match e {
                         StreamError::Closed => {
-                            return Err(io::Error::new(
-                                io::ErrorKind::BrokenPipe,
-                                "Stream closed",
-                            ));
+                            return Err(io::Error::new(io::ErrorKind::BrokenPipe, "Stream closed"));
                         }
                         StreamError::LastOperationFailed(err) => {
                             let error_str = err.to_debug_string();
@@ -134,10 +134,7 @@ impl Write for WasiSyncStream {
                     use wasip2::io::streams::StreamError;
                     match e {
                         StreamError::Closed => {
-                            return Err(io::Error::new(
-                                io::ErrorKind::BrokenPipe,
-                                "Stream closed",
-                            ));
+                            return Err(io::Error::new(io::ErrorKind::BrokenPipe, "Stream closed"));
                         }
                         StreamError::LastOperationFailed(err) => {
                             let error_str = err.to_debug_string();

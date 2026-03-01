@@ -36,7 +36,11 @@ async fn run_diagnostics() {
         let mut tick = 0;
         loop {
             tick += 1;
-            log::info!("💓 Tick #{}: {:.2}s elapsed", tick, start.elapsed().as_secs_f32());
+            log::info!(
+                "💓 Tick #{}: {:.2}s elapsed",
+                tick,
+                start.elapsed().as_secs_f32()
+            );
             aloeplatform::sleep(Duration::from_millis(500)).await;
         }
     });
@@ -47,31 +51,44 @@ async fn run_diagnostics() {
 
     log::info!("[Test] Entering accept()... (Please connect via Native client now)");
     log::info!("[Test] Expectation: If code is correct, Ticks continue. If blocking, Ticks stop.");
-    
+
     let accept_start = Instant::now();
-    
+
     match listener.accept().await {
         Ok(mut transport) => {
             let accept_duration = accept_start.elapsed();
-            log::info!("[Test] ✅ Connection Accepted after {:.2}s", accept_duration.as_secs_f32());
-            
+            log::info!(
+                "[Test] ✅ Connection Accepted after {:.2}s",
+                accept_duration.as_secs_f32()
+            );
+
             // 2. Measure Recv Spin Speed
             // We expect the native client to wait 2 seconds before sending data.
             // If the loop spins, it will die in <1ms.
             log::info!("[Test] Attempting read (Client should be silent for 2s)...");
-            
+
             let read_start = Instant::now();
             let mut buf = [0u8; 128];
-            
+
             let result = transport.recv(&mut buf).await;
             let read_duration = read_start.elapsed();
 
             match result {
-                Ok(n) => log::info!("[Test] Data received: {} bytes in {:.4}s", n, read_duration.as_secs_f32()),
+                Ok(n) => log::info!(
+                    "[Test] Data received: {} bytes in {:.4}s",
+                    n,
+                    read_duration.as_secs_f32()
+                ),
                 Err(e) => {
-                    log::error!("[Test] ❌ Read FAILED in {:.4}s. Error: {:?}", read_duration.as_secs_f32(), e);
+                    log::error!(
+                        "[Test] ❌ Read FAILED in {:.4}s. Error: {:?}",
+                        read_duration.as_secs_f32(),
+                        e
+                    );
                     if read_duration.as_millis() < 100 {
-                        log::error!("[Test] CONCLUSION: The recv loop is spinning furiously (CPU hog).");
+                        log::error!(
+                            "[Test] CONCLUSION: The recv loop is spinning furiously (CPU hog)."
+                        );
                     } else {
                         log::info!("[Test] CONCLUSION: The recv loop waited correctly.");
                     }
@@ -80,7 +97,7 @@ async fn run_diagnostics() {
         }
         Err(e) => log::error!("[Test] Accept failed: {:?}", e),
     }
-    
+
     // Keep alive to see final heartbeats
     aloeplatform::sleep(Duration::from_secs(2)).await;
 }

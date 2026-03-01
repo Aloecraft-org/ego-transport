@@ -48,7 +48,7 @@ async fn run_deadlock_test() {
     aloeplatform::spawn(async move {
         log::info!("[Client] Scheduled. Sleeping 1s...");
         aloeplatform::sleep(Duration::from_secs(1)).await;
-        
+
         log::info!("[Client] Waking up! Connecting...");
         match TcpStreamWasi::connect(addr).await {
             Ok(mut stream) => {
@@ -72,12 +72,12 @@ async fn run_deadlock_test() {
     });
 
     log::info!("[Server] Entering accept(). If this hangs > 1s, it is BROKEN.");
-    
+
     // THE TRAP:
     match listener.accept().await {
         Ok(mut transport) => {
             log::info!("[Server] Connection Accepted!");
-            
+
             let mut buf = [0u8; 128];
             log::info!("[Server] Waiting for data...");
             match transport.recv(&mut buf).await {

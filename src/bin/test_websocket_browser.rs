@@ -17,9 +17,9 @@ use wasm_bindgen_futures::spawn_local;
 pub fn run() {
     // Setup panic hook for better error messages
     console_error_panic_hook::set_once();
-    
+
     platform::init_logging();
-    
+
     // Spawn the async test
     spawn_local(async {
         run_test().await;
@@ -29,33 +29,33 @@ pub fn run() {
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 async fn run_test() {
     log::info!("=== Browser WebSocket Client Test ===");
-    
+
     // Connect to server (adjust URL as needed)
     let url = "ws://127.0.0.1:9995";
-    
+
     log::info!("[Browser Client] Connecting to {}", url);
-    
+
     match WebSocketBrowser::connect(url).await {
         Ok(mut ws) => {
             log::info!("[Browser Client] ✓ Connected");
-            
+
             // Send 3 test messages
             for i in 1..=3 {
                 let msg = format!("Hello from Browser WebSocket client, message #{}", i);
                 log::info!("[Browser Client] Sending: {}", msg);
-                
+
                 if let Err(e) = ws.send(msg.as_bytes()).await {
                     log::error!("[Browser Client] ✗ Send error: {:?}", e);
                     return;
                 }
-                
+
                 // Receive echo
                 let mut buf = [0u8; 1024];
                 match ws.recv(&mut buf).await {
                     Ok(n) => {
                         let response = String::from_utf8_lossy(&buf[..n]);
                         log::info!("[Browser Client] ✓ Received echo: {}", response);
-                        
+
                         if response == msg {
                             log::info!("[Browser Client] ✓ Echo matches!");
                         }
@@ -65,11 +65,11 @@ async fn run_test() {
                         return;
                     }
                 }
-                
+
                 // Small delay between messages
                 aloeplatform::sleep(std::time::Duration::from_millis(500)).await;
             }
-            
+
             log::info!("[Browser Client] ✓ Test complete!");
         }
         Err(e) => {

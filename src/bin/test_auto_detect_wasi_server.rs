@@ -67,10 +67,7 @@ async fn main() {
     // ─── Connection 2: WebSocket ─────────────────────────────────────────────
     log::info!("\n[Clients] ── WebSocket client ──");
     let ws_ok = run_ws_client(&format!("ws://{}", addr)).await;
-    log::info!(
-        "[Clients] WS: {}",
-        if ws_ok { "✓ PASS" } else { "✗ FAIL" }
-    );
+    log::info!("[Clients] WS: {}", if ws_ok { "✓ PASS" } else { "✗ FAIL" });
 
     // ─── Summary ─────────────────────────────────────────────────────────────
     log::info!(
@@ -197,10 +194,7 @@ async fn run_wasi_server() {
     // We use the Listener trait directly rather than ServerBuilder so we can
     // count connections and exit cleanly after the test completes.
     for conn_num in 1..=2 {
-        log::info!(
-            "[WASI Server] Waiting for connection #{} ...",
-            conn_num
-        );
+        log::info!("[WASI Server] Waiting for connection #{} ...", conn_num);
 
         match listener.accept().await {
             Ok(mut transport) => {
@@ -219,20 +213,20 @@ async fn run_wasi_server() {
                             let data = String::from_utf8_lossy(&buf[..n]);
                             log::info!(
                                 "[WASI Server] ✓ Conn #{} msg #{}: {}",
-                                conn_num, msg_count, data
+                                conn_num,
+                                msg_count,
+                                data
                             );
 
                             if let Err(e) = transport.send(&buf[..n]).await {
                                 log::error!(
                                     "[WASI Server] ✗ Send error on conn #{}: {:?}",
-                                    conn_num, e
+                                    conn_num,
+                                    e
                                 );
                                 break;
                             }
-                            log::info!(
-                                "[WASI Server] ✓ Echoed {} bytes",
-                                n
-                            );
+                            log::info!("[WASI Server] ✓ Echoed {} bytes", n);
 
                             // Each client sends 2 messages then disconnects
                             if msg_count >= 2 {
@@ -244,10 +238,7 @@ async fn run_wasi_server() {
                             }
                         }
                         Err(e) => {
-                            log::info!(
-                                "[WASI Server] Connection #{} ended: {:?}",
-                                conn_num, e
-                            );
+                            log::info!("[WASI Server] Connection #{} ended: {:?}", conn_num, e);
                             break;
                         }
                     }

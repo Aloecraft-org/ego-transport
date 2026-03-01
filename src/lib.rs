@@ -1,6 +1,6 @@
-pub mod transport;
-pub mod platform;
 pub mod log_impl;
+pub mod platform;
+pub mod transport;
 
 #[cfg(not(target_arch = "wasm32"))]
 pub use platform::ws_native::WebSocketNative;
@@ -22,7 +22,7 @@ use wasm_bindgen::prelude::*;
 pub async fn start() {
     platform::init_logging();
     log::info!("Test network starting...");
-    
+
     // Stub listener task
     aloeplatform::spawn(async {
         log::info!("Listener task started (stub)");
@@ -30,7 +30,7 @@ pub async fn start() {
             aloeplatform::sleep(Duration::from_secs(1)).await;
         }
     });
-    
+
     // Stub dialer task
     aloeplatform::spawn(async {
         log::info!("Dialer task started (stub)");
@@ -38,7 +38,7 @@ pub async fn start() {
             aloeplatform::sleep(Duration::from_secs(1)).await;
         }
     });
-    
+
     // Keep main alive
     loop {
         log::info!("Main loop tick");

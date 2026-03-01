@@ -308,13 +308,15 @@ impl Listener for AutoDetectListener {
 
             if is_websocket {
                 if !self.allow_ws {
-                    log::warn!("[AutoDetect] Rejected WebSocket connection (WebSocket not enabled)");
+                    log::warn!(
+                        "[AutoDetect] Rejected WebSocket connection (WebSocket not enabled)"
+                    );
                     continue; // stream dropped → connection closed
                 }
                 // Convert to tokio stream for the tungstenite upgrade.
                 // peek() was non-consuming so all bytes are still available.
-                let tokio_stream = tokio::net::TcpStream::from_std(stream)
-                    .map_err(TransportError::Io)?;
+                let tokio_stream =
+                    tokio::net::TcpStream::from_std(stream).map_err(TransportError::Io)?;
                 let ws = WebSocketNative::accept(tokio_stream).await?;
                 return Ok(Box::new(ws));
             } else {
@@ -396,7 +398,9 @@ impl Listener for AutoDetectListener {
 
             if is_websocket {
                 if !self.allow_ws {
-                    log::warn!("[AutoDetect] Rejected WebSocket connection (WebSocket not enabled)");
+                    log::warn!(
+                        "[AutoDetect] Rejected WebSocket connection (WebSocket not enabled)"
+                    );
                     continue; // stream dropped → connection closed
                 }
                 // Replay prefix through WasiSyncStream so tungstenite sees

@@ -17,21 +17,21 @@ use std::time::Duration;
 async fn main() {
     platform::init_logging();
     log::info!("=== Native WebSocket Test ===");
-    
+
     let addr = "127.0.0.1:9996";
-    
+
     // Spawn WebSocket server
     let server_addr = addr.to_string();
     aloeplatform::spawn(async move {
         run_ws_server(&server_addr).await;
     });
-    
+
     // Give server time to start
     aloeplatform::sleep(Duration::from_millis(100)).await;
-    
+
     // Run WebSocket client
     run_ws_client(&format!("ws://{}", addr)).await;
-    
+
     log::info!("=== Test Complete ===");
     aloeplatform::sleep(Duration::from_secs(1)).await;
 }
@@ -39,26 +39,25 @@ async fn main() {
 #[cfg(not(target_arch = "wasm32"))]
 async fn run_ws_server(addr: &str) {
     log::info!("[WS Server] Starting on {}", addr);
-    
-    let listener = TcpListenerNative::bind(addr)
-        .expect("Failed to bind");
-    
+
+    let listener = TcpListenerNative::bind(addr).expect("Failed to bind");
+
     loop {
         match listener.accept_websocket().await {
             Ok(mut ws) => {
                 log::info!("[WS Server] Client connected");
-                
+
                 aloeplatform::spawn(async move {
                     let mut buf = [0u8; 1024];
                     let mut msg_count = 0;
-                    
+
                     loop {
                         match ws.recv(&mut buf).await {
                             Ok(n) => {
                                 msg_count += 1;
                                 let data = String::from_utf8_lossy(&buf[..n]);
                                 log::info!("[WS Server] ✓ Received: {}", data);
-                                
+
                                 // Echo back
                                 if let Err(e) = ws.send(&buf[..n]).await {
                                     log::error!("[WS Server] ✗ Send error: {:?}", e);
@@ -85,28 +84,28 @@ async fn run_ws_server(addr: &str) {
 #[cfg(not(target_arch = "wasm32"))]
 async fn run_ws_client(url: &str) {
     log::info!("[WS Client] Connecting to {}", url);
-    
+
     match WebSocketNative::connect(url).await {
         Ok(mut ws) => {
             log::info!("[WS Client] ✓ Connected");
-            
+
             // Send 3 test messages
             for i in 1..=3 {
                 let msg = format!("Hello from WebSocket client, message #{}", i);
                 log::info!("[WS Client] Sending: {}", msg);
-                
+
                 if let Err(e) = ws.send(msg.as_bytes()).await {
                     log::error!("[WS Client] ✗ Send error: {:?}", e);
                     return;
                 }
-                
+
                 // Receive echo
                 let mut buf = [0u8; 1024];
                 match ws.recv(&mut buf).await {
                     Ok(n) => {
                         let response = String::from_utf8_lossy(&buf[..n]);
                         log::info!("[WS Client] ✓ Received echo: {}", response);
-                        
+
                         if response == msg {
                             log::info!("[WS Client] ✓ Echo matches!");
                         }
@@ -116,10 +115,10 @@ async fn run_ws_client(url: &str) {
                         return;
                     }
                 }
-                
+
                 aloeplatform::sleep(Duration::from_millis(500)).await;
             }
-            
+
             log::info!("[WS Client] ✓ Test complete!");
 
             log::info!("[WS Client] Closing connection gracefully");

@@ -1,7 +1,7 @@
 pub mod bridge;
+mod buffered;
 mod tcp;
 mod websocket;
-mod buffered;
 pub use bridge::TransportBridge;
 
 #[derive(Debug)]
@@ -51,7 +51,7 @@ pub trait Transport: Send + Sync {
 use async_trait::async_trait;
 
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-#[async_trait(?Send)]  // <-- Note the ?Send here
+#[async_trait(?Send)] // <-- Note the ?Send here
 pub trait Transport {
     async fn send(&mut self, data: &[u8]) -> Result<(), TransportError>;
     async fn recv(&mut self, buf: &mut [u8]) -> Result<usize, TransportError>;
@@ -91,16 +91,14 @@ pub async fn connect(addr: &str) -> Result<Box<dyn Transport>, TransportError> {
         #[cfg(not(target_arch = "wasm32"))]
         {
             use crate::platform::tcp_native::TcpStreamNative;
-            let tcp = TcpStreamNative::connect(addr)
-                .await?;
+            let tcp = TcpStreamNative::connect(addr).await?;
             return Ok(Box::new(tcp) as Box<dyn Transport>);
         }
 
         #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
         {
             use crate::platform::tcp_wasi::TcpStreamWasi;
-            let tcp = TcpStreamWasi::connect(addr)
-                .await?;
+            let tcp = TcpStreamWasi::connect(addr).await?;
             return Ok(Box::new(tcp) as Box<dyn Transport>);
         }
 

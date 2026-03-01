@@ -5,7 +5,7 @@ use crate::transport::{Transport, TransportError};
 #[cfg(not(target_arch = "wasm32"))]
 use crate::platform::ws_native::WebSocketNative;
 
-use std::io::{Read, Write, ErrorKind};
+use std::io::{ErrorKind, Read, Write};
 use std::net::TcpStream;
 use std::time::Duration;
 
@@ -16,7 +16,6 @@ pub struct TcpStreamNative {
 
 #[cfg(not(target_arch = "wasm32"))]
 impl TcpStreamNative {
-
     /// Get the remote peer address
     pub fn peer_addr(&self) -> Option<std::net::SocketAddr> {
         self.inner.peer_addr().ok()
@@ -27,18 +26,18 @@ impl TcpStreamNative {
         let stream = loop {
             match TcpStream::connect(addr) {
                 Ok(stream) => break stream,
-                Err(e) if e.kind() == ErrorKind::WouldBlock 
-                       || e.kind() == ErrorKind::NotConnected => {
+                Err(e)
+                    if e.kind() == ErrorKind::WouldBlock || e.kind() == ErrorKind::NotConnected =>
+                {
                     // Connection in progress, yield and retry
                     tokio::task::yield_now().await;
                 }
                 Err(e) => return Err(TransportError::Io(e)),
             }
         };
-        
-        stream.set_nonblocking(true)
-            .map_err(TransportError::Io)?;
-        
+
+        stream.set_nonblocking(true).map_err(TransportError::Io)?;
+
         Ok(Self { inner: stream })
     }
 }
@@ -50,13 +49,14 @@ use async_trait::async_trait;
 impl Transport for TcpStreamNative {
     async fn send(&mut self, data: &[u8]) -> Result<(), TransportError> {
         let mut written = 0;
-        
+
         while written < data.len() {
             match self.inner.write(&data[written..]) {
                 Ok(0) => {
-                    return Err(TransportError::Io(
-                        std::io::Error::new(ErrorKind::WriteZero, "write returned 0")
-                    ));
+                    return Err(TransportError::Io(std::io::Error::new(
+                        ErrorKind::WriteZero,
+                        "write returned 0",
+                    )));
                 }
                 Ok(n) => {
                     written += n;
@@ -74,7 +74,7 @@ impl Transport for TcpStreamNative {
                 }
             }
         }
-        
+
         Ok(())
     }
 
@@ -112,11 +112,9 @@ pub struct TcpListenerNative {
 #[cfg(not(target_arch = "wasm32"))]
 impl TcpListenerNative {
     pub fn bind(addr: &str) -> Result<Self, TransportError> {
-        let listener = std::net::TcpListener::bind(addr)
-            .map_err(TransportError::Io)?;
-        listener.set_nonblocking(true)
-            .map_err(TransportError::Io)?;
-        
+        let listener = std::net::TcpListener::bind(addr).map_err(TransportError::Io)?;
+        listener.set_nonblocking(true).map_err(TransportError::Io)?;
+
         Ok(Self { inner: listener })
     }
 
@@ -130,11 +128,12 @@ impl TcpListenerNative {
         loop {
             match self.inner.accept() {
                 Ok((stream, _addr)) => {
-                    stream
-                        .set_nonblocking(true)
-                        .map_err(TransportError::Io)?;
+                    stream.set_nonblocking(true).map_err(TransportError::Io)?;
 
-                        log::info!("[TCP Native] Accepting TCP connection from {:?}",stream.peer_addr());
+                    log::info!(
+                        "[TCP Native] Accepting TCP connection from {:?}",
+                        stream.peer_addr()
+                    );
 
                     return Ok(stream);
                 }
@@ -165,8 +164,7 @@ impl TcpListenerNative {
     pub async fn accept_websocket(&self) -> Result<WebSocketNative, TransportError> {
         let stream = self.accept_std().await?;
 
-        let tokio_stream = tokio::net::TcpStream::from_std(stream)
-            .map_err(TransportError::Io)?;
+        let tokio_stream = tokio::net::TcpStream::from_std(stream).map_err(TransportError::Io)?;
 
         WebSocketNative::accept(tokio_stream).await
     }

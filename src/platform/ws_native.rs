@@ -20,7 +20,6 @@ pub struct WebSocketNative {
 
 #[cfg(not(target_arch = "wasm32"))]
 impl WebSocketNative {
-
     /// Get the remote peer address from the underlying TCP stream
     pub fn peer_addr(&self) -> Option<std::net::SocketAddr> {
         // We'll have this if we're the listener, not if we're the initiator
@@ -37,14 +36,19 @@ impl WebSocketNative {
 
         log::info!("[WS Native] Connected successfully");
 
-        Ok(Self { stream: ws_stream, peer_addr: None })
+        Ok(Self {
+            stream: ws_stream,
+            peer_addr: None,
+        })
     }
     /// Accept a WebSocket connection from a TCP stream
     pub async fn accept(tcp_stream: TcpStream) -> Result<Self, TransportError> {
-        
         let peer_addr = tcp_stream.peer_addr().ok();
-        log::info!("[WS Native] Accepting WebSocket connection from {:?}", peer_addr);
-        
+        log::info!(
+            "[WS Native] Accepting WebSocket connection from {:?}",
+            peer_addr
+        );
+
         // Wrap the TcpStream in MaybeTlsStream::Plain (no TLS)
         let stream = MaybeTlsStream::Plain(tcp_stream);
 
@@ -54,7 +58,10 @@ impl WebSocketNative {
 
         log::info!("[WS Native] WebSocket handshake complete");
 
-        Ok(Self { stream: ws_stream, peer_addr: peer_addr })
+        Ok(Self {
+            stream: ws_stream,
+            peer_addr: peer_addr,
+        })
     }
 }
 

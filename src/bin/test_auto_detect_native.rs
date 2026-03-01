@@ -39,7 +39,7 @@ async fn main() {
     let tcp_handle = aloeplatform::spawn(run_tcp_client(addr));
 
     let ws_addr = format!("ws://{}", addr);
-    let ws_handle = aloeplatform::spawn(async move { run_ws_client(&ws_addr).await }); 
+    let ws_handle = aloeplatform::spawn(async move { run_ws_client(&ws_addr).await });
 
     let tcp_ok = tcp_handle.await.unwrap_or(false);
     let ws_ok = ws_handle.await.unwrap_or(false);
@@ -118,10 +118,7 @@ async fn run_echo_server(addr: &str) {
                 }
             }
 
-            log::info!(
-                "[Echo Server] Handler complete ({} messages)",
-                msg_count
-            );
+            log::info!("[Echo Server] Handler complete ({} messages)", msg_count);
         })
         .await
         .ok();
@@ -259,7 +256,10 @@ async fn run_rejected_tcp_client(addr: &str) -> bool {
 
     // Send raw TCP data — this triggers the server to peek, detect non-WS,
     // and drop the connection.
-    if let Err(_) = transport.send(b"This is raw TCP, not a WebSocket handshake").await {
+    if let Err(_) = transport
+        .send(b"This is raw TCP, not a WebSocket handshake")
+        .await
+    {
         log::info!("[Rejected TCP] ✓ Send failed (connection already closed)");
         return true;
     }

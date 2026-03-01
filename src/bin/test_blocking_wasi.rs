@@ -42,7 +42,7 @@ async fn run_test() {
 
     let addr = "127.0.0.1:9998";
     let listener = TcpListenerWasi::bind(addr).await.expect("Bind failed");
-    
+
     log::info!("[Server] Bound. Accepting... (Heartbeats should continue!)");
 
     // This accept call SHOULD yield to the runtime, allowing heartbeats.
@@ -50,7 +50,7 @@ async fn run_test() {
     match listener.accept().await {
         Ok(mut transport) => {
             log::info!("[Server] Accepted connection!");
-            
+
             // Wait for data. The client will be silent for 2 seconds.
             // If recv() returns an error before 2 seconds, BUG #2 is confirmed.
             let mut buf = [0u8; 128];
