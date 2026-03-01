@@ -27,24 +27,24 @@ async fn run() {
     log::info!("Test network starting...");
     
     // Stub listener task
-    platform::spawn::spawn(async {
+    aloeplatform::spawn(async {
         log::info!("Listener task started (stub)");
         loop {
-            platform::sleep::sleep(Duration::from_secs(1)).await;
+            aloeplatform::sleep(Duration::from_secs(1)).await;
         }
     });
     
     // Stub dialer task
-    platform::spawn::spawn(async {
+    aloeplatform::spawn(async {
         log::info!("Dialer task started (stub)");
         loop {
-            platform::sleep::sleep(Duration::from_secs(1)).await;
+            aloeplatform::sleep(Duration::from_secs(1)).await;
         }
     });
     
     // Keep main alive
     loop {
         log::info!("Main loop tick");
-        platform::sleep::sleep(Duration::from_secs(5)).await;
+        aloeplatform::sleep(Duration::from_secs(5)).await;
     }
 }

@@ -1,5 +1,8 @@
 // tests/bridge_test.rs
 
+mod common;
+use common::{async_test, test};
+
 use aloeclient::transport::{Transport, TransportBridge};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -48,7 +51,7 @@ impl Transport for MockTransport {
     }
 }
 
-#[tokio::test]
+#[async_test]
 async fn test_bridge_read() {
     let mock = MockTransport::new(vec![b"Hello".to_vec(), b" ".to_vec(), b"World".to_vec()]);
 
@@ -60,7 +63,7 @@ async fn test_bridge_read() {
     assert_eq!(&buf, b"Hello World");
 }
 
-#[tokio::test]
+#[async_test]
 async fn test_bridge_write() {
     let mock = MockTransport::new(vec![]);
     let mut bridge = TransportBridge::new(Box::new(mock));
@@ -70,7 +73,7 @@ async fn test_bridge_write() {
     // Can't easily verify without exposing inner, but at least it doesn't panic
 }
 
-#[tokio::test]
+#[async_test]
 async fn test_bridge_partial_reads() {
     // Test buffering when Transport returns less than requested
     let mock = MockTransport::new(vec![vec![1, 2, 3], vec![4, 5]]);
@@ -84,7 +87,7 @@ async fn test_bridge_partial_reads() {
     assert_eq!(&buf, &[1, 2, 3, 4, 5]);
 }
 
-#[tokio::test]
+#[async_test]
 async fn test_bridge_read_single_chunk() {
     let mock = MockTransport::new(vec![b"Hello World".to_vec()]);
 
@@ -96,7 +99,7 @@ async fn test_bridge_read_single_chunk() {
     assert_eq!(&buf, b"Hello World");
 }
 
-#[tokio::test]
+#[async_test]
 async fn test_bridge_read_multiple_chunks() {
     let mock = MockTransport::new(vec![b"Hello".to_vec(), b" ".to_vec(), b"World".to_vec()]);
 
@@ -108,7 +111,7 @@ async fn test_bridge_read_multiple_chunks() {
     assert_eq!(&buf, b"Hello World");
 }
 
-#[tokio::test]
+#[async_test]
 async fn test_bridge_read_partial() {
     // Transport returns more than we ask for initially
     let mock = MockTransport::new(vec![b"Hello World Extra".to_vec()]);
@@ -126,7 +129,7 @@ async fn test_bridge_read_partial() {
     assert_eq!(&buf2, b" World");
 }
 
-#[tokio::test]
+#[async_test]
 async fn test_bridge_eof() {
     let mock = MockTransport::new(vec![]); // No data
 
@@ -138,7 +141,7 @@ async fn test_bridge_eof() {
     assert_eq!(n, 0); // Should indicate EOF
 }
 
-#[tokio::test]
+#[async_test]
 async fn test_bridge_small_reads() {
     // Simulate many small reads
     let mock = MockTransport::new(vec![vec![1], vec![2], vec![3], vec![4], vec![5]]);

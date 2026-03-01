@@ -28,18 +28,18 @@ async fn main() {
     let addr = "127.0.0.1:9990";
 
     let server_addr = addr.to_string();
-    tokio::spawn(async move {
+    aloeplatform::spawn(async move {
         run_echo_server(&server_addr).await;
     });
 
-    tokio::time::sleep(Duration::from_millis(100)).await;
+    aloeplatform::sleep(Duration::from_millis(100)).await;
 
     log::info!("[Test 1] Spawning concurrent TCP + WebSocket clients...\n");
 
-    let tcp_handle = tokio::spawn(run_tcp_client(addr));
+    let tcp_handle = aloeplatform::spawn(run_tcp_client(addr));
 
     let ws_addr = format!("ws://{}", addr);
-    let ws_handle = tokio::spawn(async move { run_ws_client(&ws_addr).await }); 
+    let ws_handle = aloeplatform::spawn(async move { run_ws_client(&ws_addr).await }); 
 
     let tcp_ok = tcp_handle.await.unwrap_or(false);
     let ws_ok = ws_handle.await.unwrap_or(false);
@@ -55,11 +55,11 @@ async fn main() {
 
     let ws_only_addr = "127.0.0.1:9991";
     let ws_only_addr_owned = ws_only_addr.to_string();
-    tokio::spawn(async move {
+    aloeplatform::spawn(async move {
         run_ws_only_server(&ws_only_addr_owned).await;
     });
 
-    tokio::time::sleep(Duration::from_millis(100)).await;
+    aloeplatform::sleep(Duration::from_millis(100)).await;
 
     let reject_ok = run_rejected_tcp_client(ws_only_addr).await;
     log::info!(
@@ -77,7 +77,7 @@ async fn main() {
         }
     );
 
-    tokio::time::sleep(Duration::from_secs(1)).await;
+    aloeplatform::sleep(Duration::from_secs(1)).await;
 }
 
 // ─── Servers ─────────────────────────────────────────────────────────────────
@@ -189,7 +189,7 @@ async fn run_tcp_client(addr: &str) -> bool {
             }
         }
 
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        aloeplatform::sleep(Duration::from_millis(100)).await;
     }
 
     log::info!("[TCP Client] ✓ Complete");
@@ -234,7 +234,7 @@ async fn run_ws_client(url: &str) -> bool {
             }
         }
 
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        aloeplatform::sleep(Duration::from_millis(100)).await;
     }
 
     log::info!("[WS Client] ✓ Complete");

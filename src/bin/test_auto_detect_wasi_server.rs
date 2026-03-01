@@ -50,7 +50,7 @@ async fn main() {
 
     // Give the WASI server time to bind and start listening.
     log::info!("[Clients] Waiting 1s for WASI server to start...");
-    tokio::time::sleep(Duration::from_secs(1)).await;
+    aloeplatform::sleep(Duration::from_secs(1)).await;
 
     // ─── Connection 1: TCP ───────────────────────────────────────────────────
     log::info!("\n[Clients] ── TCP client ──");
@@ -62,7 +62,7 @@ async fn main() {
 
     // Brief pause — WASI server is sequential, give it a moment to loop back
     // to accept after the TCP handler completes.
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    aloeplatform::sleep(Duration::from_millis(500)).await;
 
     // ─── Connection 2: WebSocket ─────────────────────────────────────────────
     log::info!("\n[Clients] ── WebSocket client ──");
@@ -78,7 +78,7 @@ async fn main() {
         if tcp_ok && ws_ok { "PASSED" } else { "FAILED" }
     );
 
-    tokio::time::sleep(Duration::from_secs(1)).await;
+    aloeplatform::sleep(Duration::from_secs(1)).await;
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -117,7 +117,7 @@ async fn run_tcp_client(addr: &str) -> bool {
                 return false;
             }
         }
-        tokio::time::sleep(Duration::from_millis(200)).await;
+        aloeplatform::sleep(Duration::from_millis(200)).await;
     }
 
     log::info!("[TCP Client] ✓ Complete");
@@ -160,7 +160,7 @@ async fn run_ws_client(url: &str) -> bool {
                 return false;
             }
         }
-        tokio::time::sleep(Duration::from_millis(200)).await;
+        aloeplatform::sleep(Duration::from_millis(200)).await;
     }
 
     log::info!("[WS Client] ✓ Complete");

@@ -1,5 +1,16 @@
 [target.wasm32-wasip2]
-runner = "wasmtime run -S inherit-network --env TMPDIR=/tmp --dir /tmp::/tmp"
+runner = [
+    "wasmtime", "run",
+    "-S", "inherit-network",
+    "--dir", ".::.",           # Map current directory
+    "--dir", "/tmp::/tmp",     # Map /tmp
+    "--env", "TMPDIR=/tmp",
+    "--"
+]
+
+
+[target.wasm32-unknown-unknown]
+runner = "wasm-bindgen-test-runner"
 
 # FIXME: wasip2 is still considered unstable. Get rid of this as soon as there's an upgrade
 rustflags = [

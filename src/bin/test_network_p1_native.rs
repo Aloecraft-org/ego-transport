@@ -37,7 +37,7 @@ async fn run_native() {
     
     // Spawn listener task
     let listener_addr = addr.to_string();
-    platform::spawn::spawn(async move {
+    aloeplatform::spawn(async move {
         log::info!("[Listener] Starting on {}", listener_addr);
         
         let listener = TcpListener::bind(&listener_addr)
@@ -53,7 +53,7 @@ async fn run_native() {
                     log::info!("[Listener] Accepted connection from {}", peer_addr);
                     
                     // Spawn handler for this connection
-                    platform::spawn::spawn(async move {
+                    aloeplatform::spawn(async move {
                         let mut transport = TcpStreamNative { inner: stream };
                         transport.inner.set_nonblocking(true).ok();
                         
@@ -97,11 +97,11 @@ async fn run_native() {
     });
     
     // Give listener time to start
-    tokio::time::sleep(Duration::from_millis(100)).await;
+    aloeplatform::sleep(Duration::from_millis(100)).await;
     
     // Spawn client task
     let client_addr = addr.to_string();
-    platform::spawn::spawn(async move {
+    aloeplatform::spawn(async move {
         log::info!("[Client] Connecting to {}", client_addr);
         
         match TcpStreamNative::connect(&client_addr).await {
@@ -131,7 +131,7 @@ async fn run_native() {
                         }
                     }
                     
-                    tokio::time::sleep(Duration::from_secs(1)).await;
+                    aloeplatform::sleep(Duration::from_secs(1)).await;
                 }
                 
                 log::info!("[Client] Test complete!");
@@ -144,7 +144,7 @@ async fn run_native() {
     
     // Keep main alive to see the test complete
     for i in 0..10 {
-        tokio::time::sleep(Duration::from_secs(1)).await;
+        aloeplatform::sleep(Duration::from_secs(1)).await;
         if i == 0 {
             log::info!("[Main] Test running...");
         }
@@ -158,7 +158,7 @@ async fn run_wasi() {
     platform::init_logging();
     log::info!("WASI test - not implemented yet");
     loop {
-        platform::sleep::sleep(Duration::from_secs(5)).await;
+        aloeplatform::sleep(Duration::from_secs(5)).await;
     }
 }
 
@@ -167,6 +167,6 @@ async fn run_browser() {
     platform::init_logging();
     log::info!("Browser test - not implemented yet");
     loop {
-        platform::sleep::sleep(Duration::from_secs(5)).await;
+        aloeplatform::sleep(Duration::from_secs(5)).await;
     }
 }

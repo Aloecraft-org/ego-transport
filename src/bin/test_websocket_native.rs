@@ -22,18 +22,18 @@ async fn main() {
     
     // Spawn WebSocket server
     let server_addr = addr.to_string();
-    tokio::spawn(async move {
+    aloeplatform::spawn(async move {
         run_ws_server(&server_addr).await;
     });
     
     // Give server time to start
-    tokio::time::sleep(Duration::from_millis(100)).await;
+    aloeplatform::sleep(Duration::from_millis(100)).await;
     
     // Run WebSocket client
     run_ws_client(&format!("ws://{}", addr)).await;
     
     log::info!("=== Test Complete ===");
-    tokio::time::sleep(Duration::from_secs(1)).await;
+    aloeplatform::sleep(Duration::from_secs(1)).await;
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -48,7 +48,7 @@ async fn run_ws_server(addr: &str) {
             Ok(mut ws) => {
                 log::info!("[WS Server] Client connected");
                 
-                tokio::spawn(async move {
+                aloeplatform::spawn(async move {
                     let mut buf = [0u8; 1024];
                     let mut msg_count = 0;
                     
@@ -117,14 +117,14 @@ async fn run_ws_client(url: &str) {
                     }
                 }
                 
-                tokio::time::sleep(Duration::from_millis(500)).await;
+                aloeplatform::sleep(Duration::from_millis(500)).await;
             }
             
             log::info!("[WS Client] ✓ Test complete!");
 
             log::info!("[WS Client] Closing connection gracefully");
             drop(ws); // Drop will close the connection
-            tokio::time::sleep(Duration::from_millis(100)).await;
+            aloeplatform::sleep(Duration::from_millis(100)).await;
         }
         Err(e) => {
             log::error!("[WS Client] ✓ Connection failed: {:?}", e);

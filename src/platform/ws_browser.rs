@@ -87,7 +87,7 @@ impl WebSocketBrowser {
         let mut attempts = 0;
         while !*connected.borrow() && attempts < 500 {  // Increased from 100 to 500
             // Yield to event loop
-            gloo_timers::future::sleep(std::time::Duration::from_millis(10)).await;
+            aloeplatform::sleep(std::time::Duration::from_millis(10)).await;
             attempts += 1;
             
             // Check WebSocket state
@@ -159,7 +159,7 @@ impl Transport for WebSocketBrowser {
                     }
                     
                     // Yield to event loop
-                    gloo_timers::future::sleep(std::time::Duration::from_millis(10)).await;
+                    aloeplatform::sleep(std::time::Duration::from_millis(10)).await;
                 }
             }
         }

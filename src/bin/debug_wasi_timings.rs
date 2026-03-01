@@ -31,13 +31,13 @@ async fn run_diagnostics() {
     // 1. Start a Heartbeat Monitor
     // If accept() yields properly, this logs every 500ms.
     // If accept() blocks, this will SILENTLY PAUSE.
-    tokio::spawn(async {
+    aloeplatform::spawn(async {
         let start = Instant::now();
         let mut tick = 0;
         loop {
             tick += 1;
             log::info!("💓 Tick #{}: {:.2}s elapsed", tick, start.elapsed().as_secs_f32());
-            tokio::time::sleep(Duration::from_millis(500)).await;
+            aloeplatform::sleep(Duration::from_millis(500)).await;
         }
     });
 
@@ -82,5 +82,5 @@ async fn run_diagnostics() {
     }
     
     // Keep alive to see final heartbeats
-    tokio::time::sleep(Duration::from_secs(2)).await;
+    aloeplatform::sleep(Duration::from_secs(2)).await;
 }

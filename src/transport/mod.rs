@@ -57,7 +57,7 @@ pub trait Transport {
     async fn recv(&mut self, buf: &mut [u8]) -> Result<usize, TransportError>;
 }
 
-/// Platform-specific transport creation (probably belongs in platform)
+/// Platform-specific transport creation
 pub async fn connect(addr: &str) -> Result<Box<dyn Transport>, TransportError> {
     // WebSocket
     if addr.starts_with("ws://") || addr.starts_with("wss://") {

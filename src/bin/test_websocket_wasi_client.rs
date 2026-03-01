@@ -42,7 +42,7 @@ async fn run_native_server(addr: &str) {
             Ok(mut ws) => {
                 log::info!("[WS Server] Client connected");
 
-                tokio::spawn(async move {
+                aloeplatform::spawn(async move {
                     let mut buf = [0u8; 1024];
                     let mut msg_count = 0;
 
@@ -131,7 +131,7 @@ async fn run_wasi_client() {
                     }
                 }
 
-                platform::sleep::sleep(Duration::from_millis(500)).await;
+                aloeplatform::sleep(Duration::from_millis(500)).await;
             }
 
             log::info!("[WS WASI Client] ✓ Test complete!");
@@ -141,7 +141,7 @@ async fn run_wasi_client() {
         }
     }
 
-    platform::sleep::sleep(Duration::from_secs(1)).await;
+    aloeplatform::sleep(Duration::from_secs(1)).await;
 }
 
 // Stub for browser

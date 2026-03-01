@@ -70,7 +70,7 @@ async fn run_native_server() {
                 log::info!("[Server] ✓ Accepted connection from {}", peer_addr);
 
                 // Spawn handler for this connection
-                platform::spawn::spawn(async move {
+                aloeplatform::spawn(async move {
                     let mut transport = TcpStreamNative { inner: stream };
                     transport.inner.set_nonblocking(true).ok();
 
@@ -144,7 +144,7 @@ async fn run_wasi_client() {
                 log::info!("[WASI Client] ✓ Sent {} bytes", msg.len());
 
                 // Give server time to echo back
-                platform::sleep::sleep(Duration::from_millis(50)).await;
+                aloeplatform::sleep(Duration::from_millis(50)).await;
 
                 // Receive echo
                 let mut buf = [0u8; 1024];
@@ -165,7 +165,7 @@ async fn run_wasi_client() {
                     }
                 }
 
-                platform::sleep::sleep(Duration::from_millis(500)).await;
+                aloeplatform::sleep(Duration::from_millis(500)).await;
             }
 
             log::info!("[WASI Client] ✓ Test complete!");
@@ -176,5 +176,5 @@ async fn run_wasi_client() {
     }
 
     // Give logs time to flush
-    platform::sleep::sleep(Duration::from_secs(1)).await;
+    aloeplatform::sleep(Duration::from_secs(1)).await;
 }

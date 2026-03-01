@@ -123,7 +123,7 @@ impl TcpStreamWasi {
                     // Check the error type
                     match e {
                         wasip2::sockets::network::ErrorCode::WouldBlock => {
-                            crate::platform::sleep::sleep(Duration::from_millis(1)).await;
+                            aloeplatform::sleep(Duration::from_millis(1)).await;
                             continue;
                         }
                         _ => {
@@ -237,7 +237,7 @@ impl Transport for TcpStreamWasi {
                     StreamError::LastOperationFailed(err) => {
                         let error_str = err.to_debug_string();
                         if error_str.contains("would-block") {
-                            crate::platform::sleep::sleep(Duration::from_millis(1)).await;
+                            aloeplatform::sleep(Duration::from_millis(1)).await;
                             continue;
                         } else {
                             return Err(TransportError::Protocol(format!(
@@ -262,7 +262,7 @@ impl Transport for TcpStreamWasi {
             match self.input.read(buf.len() as u64) {
                 Ok(data) => {
                     if data.is_empty() {
-                        crate::platform::sleep::sleep(Duration::from_millis(1)).await;
+                        aloeplatform::sleep(Duration::from_millis(1)).await;
                         continue;
                     }
                     let n = data.len().min(buf.len());
@@ -280,7 +280,7 @@ impl Transport for TcpStreamWasi {
                             let error_str = err.to_debug_string();
 
                             if err.to_debug_string().contains("would-block") {
-                                crate::platform::sleep::sleep(Duration::from_millis(1)).await;
+                                aloeplatform::sleep(Duration::from_millis(1)).await;
                                 continue;
                             } else if error_str.contains("closed") {
                                 log::info!("[WASI TCP] Connection closed");
@@ -365,7 +365,7 @@ impl TcpListenerWasi {
                 }
                 Err(e) => match e {
                     wasip2::sockets::network::ErrorCode::WouldBlock => {
-                        crate::platform::sleep::sleep(Duration::from_millis(5)).await;
+                        aloeplatform::sleep(Duration::from_millis(5)).await;
                         continue;
                     }
                     _ => {
@@ -391,7 +391,7 @@ impl TcpListenerWasi {
                 }
                 Err(e) => match e {
                     wasip2::sockets::network::ErrorCode::WouldBlock => {
-                        crate::platform::sleep::sleep(Duration::from_millis(10)).await;
+                        aloeplatform::sleep(Duration::from_millis(10)).await;
                         continue;
                     }
                     _ => {
@@ -427,7 +427,7 @@ impl TcpListenerWasi {
                 Err(e) => match e {
                     wasip2::sockets::network::ErrorCode::WouldBlock => {
                         use crate::platform;
-                        platform::sleep::sleep(Duration::from_millis(10)).await;
+                        aloeplatform::sleep(Duration::from_millis(10)).await;
                         continue;
                     }
                     _ => {

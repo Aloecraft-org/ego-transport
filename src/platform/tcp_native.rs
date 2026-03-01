@@ -1,7 +1,6 @@
 #[cfg(not(target_arch = "wasm32"))]
 use crate::platform;
 use crate::transport::{Transport, TransportError};
-use crate::platform::sleep::sleep;
 
 #[cfg(not(target_arch = "wasm32"))]
 use crate::platform::ws_native::WebSocketNative;

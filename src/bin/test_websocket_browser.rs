@@ -67,7 +67,7 @@ async fn run_test() {
                 }
                 
                 // Small delay between messages
-                gloo_timers::future::sleep(std::time::Duration::from_millis(500)).await;
+                aloeplatform::sleep(std::time::Duration::from_millis(500)).await;
             }
             
             log::info!("[Browser Client] ✓ Test complete!");

@@ -44,6 +44,7 @@ name = "test_deadlock"
 path = "src/bin/test_deadlock.rs"
 
 [dependencies]
+aloeplatform = { path = "../aloeplatform" }
 async-trait = "0.1.89"
 # === Core (all platforms) ===
 log = "0.4"
@@ -89,4 +90,5 @@ console_log = "1"
 
 # Test dependencies
 [dev-dependencies]
+wasm-bindgen-test = "0.3.12"
 tokio-test = "0.4"

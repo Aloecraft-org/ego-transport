@@ -38,7 +38,7 @@ async fn run_native_client() {
     let addr = "127.0.0.1:9997";
 
     // Give WASI server time to start
-    tokio::time::sleep(Duration::from_secs(1)).await;
+    aloeplatform::sleep(Duration::from_secs(1)).await;
 
     log::info!("[Client] Connecting to WASI server at {}", addr);
 
@@ -76,7 +76,7 @@ async fn run_native_client() {
                     }
                 }
 
-                tokio::time::sleep(Duration::from_millis(500)).await;
+                aloeplatform::sleep(Duration::from_millis(500)).await;
             }
 
             log::info!("[Client] ✓ Test complete!");
@@ -87,7 +87,7 @@ async fn run_native_client() {
     }
 
     // Give logs time to flush
-    tokio::time::sleep(Duration::from_secs(1)).await;
+    aloeplatform::sleep(Duration::from_secs(1)).await;
 }
 
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]

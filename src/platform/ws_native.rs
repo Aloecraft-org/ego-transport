@@ -1,4 +1,3 @@
-use crate::platform::sleep::sleep;
 use crate::transport::{Transport, TransportError};
 use std::time::Duration;
 

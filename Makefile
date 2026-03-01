@@ -1,39 +1,49 @@
-# ===========================================
-# ALOECLIENT MAKEFILE
-# ===========================================
+TARGET_WASI:=--target wasm32-wasip2
+TARGET_BROWSER:=--target wasm32-unknown-unknown
+QUIET_WARN:=RUSTFLAGS="-Awarnings"
 
-clean: 
+ifneq ($(filter quiet,$(MAKECMDGOALS)),)
+CARGO_ENV:=$(QUIET_WARN)
+else
+CARGO_ENV:=
+endif
+
+quiet:
+	@true
+
+clean:
+	rm -rf target .data
+
+_init:
+	@mkdir -p .data/home .data/tmp
+
+define cargo_targets  # $(1)=command, $(2)=extra flags
+$(1)_native:
+	$(CARGO_ENV) cargo $(1)
+$(1)_wasi:
+	$(CARGO_ENV) cargo $(1) $(TARGET_WASI)
+$(1)_browser:
+	$(CARGO_ENV) cargo $(1) $(TARGET_BROWSER)
+$(1): $(1)_native $(1)_wasi $(1)_browser
+endef
+
+$(eval $(call cargo_targets,build))
+$(eval $(call cargo_targets,check))
+# $(eval $(call cargo_targets,test))
+
+check: check_native check_wasi check_browser
+# test: test_native test_wasi test_browser
+build: build_native build_wasi build_browser
+
+clean:
+	cargo clean
 	rm -rf target
 
-# ===========================================
-# BUILD TARGETS
-# ===========================================
+fmt:
+	cargo fmt
 
-build_native:
-	cargo build
-
-build_wasm:
-	cargo build --target wasm32-wasip2
-
-build_web:
-	cargo build --target wasm32-unknown-unknown
-
-build: build_native build_wasm build_web
-
-# ===========================================
-# CHECK TARGETS (Fast compilation check)
-# ===========================================
-
-check_native:
-	RUSTFLAGS="-Awarnings" cargo check
-
-check_wasm:
-	RUSTFLAGS="-Awarnings" cargo check --target wasm32-wasip2
-
-check_web:
-	RUSTFLAGS="-Awarnings" cargo check --target wasm32-unknown-unknown
-
-check: check_native check_wasm check_web
+clippy:
+	cargo clippy --all-targets --all-features -- -D warnings
 
 # ===========================================
 # PHASE 1: BASIC PLATFORM TESTS

@@ -31,12 +31,12 @@ async fn run_test() {
     log::info!("=== WASI Blocking Proof Test ===");
 
     // 1. Spawn a "Heartbeat" task to detect runtime freezing
-    tokio::spawn(async {
+    aloeplatform::spawn(async {
         let mut i = 0;
         loop {
             i += 1;
             log::info!("💓 Heartbeat tick #{}", i);
-            tokio::time::sleep(Duration::from_millis(500)).await;
+            aloeplatform::sleep(Duration::from_millis(500)).await;
         }
     });
 

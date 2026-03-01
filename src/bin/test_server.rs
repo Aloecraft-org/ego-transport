@@ -44,12 +44,12 @@ async fn run_native() {
     
     // Start server in background
     let server_addr = addr.to_string();
-    tokio::spawn(async move {
+    aloeplatform::spawn(async move {
         run_native_server(&server_addr).await;
     });
     
     // Give server time to start
-    tokio::time::sleep(Duration::from_millis(100)).await;
+    aloeplatform::sleep(Duration::from_millis(100)).await;
     
     // Run multiple clients concurrently
     log::info!("[Native] Spawning 3 concurrent clients...");
@@ -57,7 +57,7 @@ async fn run_native() {
     let mut handles = vec![];
     for client_id in 1..=3 {
         let addr = addr.to_string();
-        let handle = tokio::spawn(async move {
+        let handle = aloeplatform::spawn(async move {
             run_native_client(&addr, client_id).await;
         });
         handles.push(handle);
@@ -69,7 +69,7 @@ async fn run_native() {
     }
     
     log::info!("=== Native Test Complete ===");
-    tokio::time::sleep(Duration::from_secs(1)).await;
+    aloeplatform::sleep(Duration::from_secs(1)).await;
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -145,7 +145,7 @@ async fn run_native_client(addr: &str, client_id: u32) {
                     }
                 }
                 
-                tokio::time::sleep(Duration::from_millis(100)).await;
+                aloeplatform::sleep(Duration::from_millis(100)).await;
             }
             
             log::info!("[Client #{}] ✓ Complete", client_id);
