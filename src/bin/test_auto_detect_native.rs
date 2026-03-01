@@ -21,7 +21,7 @@ use std::time::Duration;
 #[cfg(not(target_arch = "wasm32"))]
 #[tokio::main]
 async fn main() {
-    platform::init_logging();
+    aloeplatform::init();
     log::info!("=== Native AutoDetect Test ===\n");
 
     // ─── Test 1: Both protocols accepted concurrently ───────────────────────

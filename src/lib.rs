@@ -1,4 +1,3 @@
-pub mod log_impl;
 pub mod platform;
 pub mod transport;
 
@@ -18,30 +17,3 @@ use std::time::Duration;
 
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 use wasm_bindgen::prelude::*;
-
-pub async fn start() {
-    platform::init_logging();
-    log::info!("Test network starting...");
-
-    // Stub listener task
-    aloeplatform::spawn(async {
-        log::info!("Listener task started (stub)");
-        loop {
-            aloeplatform::sleep(Duration::from_secs(1)).await;
-        }
-    });
-
-    // Stub dialer task
-    aloeplatform::spawn(async {
-        log::info!("Dialer task started (stub)");
-        loop {
-            aloeplatform::sleep(Duration::from_secs(1)).await;
-        }
-    });
-
-    // Keep main alive
-    loop {
-        log::info!("Main loop tick");
-        aloeplatform::sleep(Duration::from_secs(5)).await;
-    }
-}

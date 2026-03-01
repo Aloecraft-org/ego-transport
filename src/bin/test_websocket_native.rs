@@ -15,7 +15,7 @@ use std::time::Duration;
 #[cfg(not(target_arch = "wasm32"))]
 #[tokio::main]
 async fn main() {
-    platform::init_logging();
+    aloeplatform::init();
     log::info!("=== Native WebSocket Test ===");
 
     let addr = "127.0.0.1:9996";

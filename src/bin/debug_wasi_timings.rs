@@ -25,7 +25,7 @@ fn main() {}
 
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
 async fn run_diagnostics() {
-    aloeclient::platform::init_logging();
+    aloeplatform::init();
     log::info!("=== WASI Timing Diagnostics ===");
 
     // 1. Start a Heartbeat Monitor

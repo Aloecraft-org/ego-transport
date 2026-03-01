@@ -37,7 +37,7 @@ fn main() {
 
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
 async fn run_deadlock_test() {
-    aloeclient::platform::init_logging();
+    aloeplatform::init();
     log::info!("=== WASI Deadlock Test ===");
 
     let addr = "127.0.0.1:9990";

@@ -27,7 +27,7 @@ fn main() {
 
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
 async fn run_test() {
-    aloeclient::platform::init_logging();
+    aloeplatform::init();
     log::info!("=== WASI Blocking Proof Test ===");
 
     // 1. Spawn a "Heartbeat" task to detect runtime freezing

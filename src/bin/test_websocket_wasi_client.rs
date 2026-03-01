@@ -24,7 +24,7 @@ use std::time::Duration;
 #[cfg(not(target_arch = "wasm32"))]
 #[tokio::main]
 async fn main() {
-    platform::init_logging();
+    aloeplatform::init();
     log::info!("=== Native WebSocket Server for WASI Client ===");
 
     let addr = "127.0.0.1:9995";
@@ -82,6 +82,7 @@ fn main() {
     println!("WASI client starting...");
 
     tokio::runtime::Builder::new_current_thread()
+        .enable_time()
         .build()
         .unwrap()
         .block_on(async {
@@ -94,7 +95,7 @@ fn main() {
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
 async fn run_wasi_client() {
     println!("run_wasi_client called");
-    platform::init_logging();
+    aloeplatform::init();
     println!("Logging initialized");
     log::info!("=== WASI WebSocket Client Test ===");
 

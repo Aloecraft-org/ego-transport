@@ -6,9 +6,4 @@ pub mod ws_native;
 pub mod ws_wasi;
 
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
-pub mod wasi_sync_adapter; // Add this
-
-/// Initialize Logging
-pub fn init_logging() {
-    crate::log_impl::init();
-}
+pub mod wasi_sync_adapter;

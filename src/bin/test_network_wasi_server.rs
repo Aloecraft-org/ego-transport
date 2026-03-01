@@ -32,7 +32,7 @@ fn main() {
 
 #[cfg(not(target_arch = "wasm32"))]
 async fn run_native_client() {
-    platform::init_logging();
+    aloeplatform::init();
     log::info!("=== Native TCP Client for WASI Server Test ===");
 
     let addr = "127.0.0.1:9997";
@@ -92,7 +92,7 @@ async fn run_native_client() {
 
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
 async fn run_wasi_server() {
-    platform::init_logging();
+    aloeplatform::init();
     log::info!("=== WASI TCP Server Test ===");
 
     let addr = "127.0.0.1:9997";

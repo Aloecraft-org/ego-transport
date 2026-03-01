@@ -139,8 +139,8 @@ test_ws_wasi_server:
 	@echo "Run in another terminal: make test_ws_wasi_client"
 	cargo run --bin test_websocket_wasi_client
 
-test_ws_wasi_client:
-	wasmtime run --wasi inherit-network target/wasm32-wasip2/debug/test_websocket_wasi_client.wasm
+test_ws_wasi_client: test_ws_wasi_build
+	cargo run --target=wasm32-wasip2 --bin test_websocket_wasi_client
 
 # Combined WASI test (shows instructions)
 test_ws_wasi: test_ws_wasi_build
@@ -157,7 +157,7 @@ test_ws_wasi: test_ws_wasi_build
 # Browser WebSocket Client → Native WebSocket Server
 test_ws_browser_build:
 	cargo build --target wasm32-unknown-unknown --bin test_websocket_browser
-
+	
 test_ws_browser_server:
 	@echo "=== Starting Native WebSocket Server for Browser ==="
 	@echo "Open browser: http://localhost:9001"

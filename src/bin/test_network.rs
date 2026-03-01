@@ -23,7 +23,7 @@ fn main() {
 }
 
 async fn run() {
-    platform::init_logging();
+    aloeplatform::init();
     log::info!("Test network starting...");
 
     // Stub listener task

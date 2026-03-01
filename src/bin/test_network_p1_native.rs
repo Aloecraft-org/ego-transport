@@ -30,7 +30,7 @@ fn main() {
 
 #[cfg(not(target_arch = "wasm32"))]
 async fn run_native() {
-    platform::init_logging();
+    aloeplatform::init();
     log::info!("=== Native TCP Test Starting ===");
 
     let addr = "127.0.0.1:9999";
@@ -157,7 +157,7 @@ async fn run_native() {
 
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
 async fn run_wasi() {
-    platform::init_logging();
+    aloeplatform::init();
     log::info!("WASI test - not implemented yet");
     loop {
         aloeplatform::sleep(Duration::from_secs(5)).await;
@@ -166,7 +166,7 @@ async fn run_wasi() {
 
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 async fn run_browser() {
-    platform::init_logging();
+    aloeplatform::init();
     log::info!("Browser test - not implemented yet");
     loop {
         aloeplatform::sleep(Duration::from_secs(5)).await;

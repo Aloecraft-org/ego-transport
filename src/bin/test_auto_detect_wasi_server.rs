@@ -43,7 +43,7 @@ use aloeclient::transport::Transport;
 #[cfg(not(target_arch = "wasm32"))]
 #[tokio::main]
 async fn main() {
-    platform::init_logging();
+    aloeplatform::init();
     log::info!("=== Native Clients for WASI AutoDetect Server ===\n");
 
     let addr = "127.0.0.1:9992";
@@ -178,7 +178,7 @@ fn main() {
 
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
 async fn run_wasi_server() {
-    platform::init_logging();
+    aloeplatform::init();
     log::info!("=== WASI AutoDetect Server Test ===\n");
 
     let addr = "127.0.0.1:9992";

@@ -18,7 +18,7 @@ pub fn run() {
     // Setup panic hook for better error messages
     console_error_panic_hook::set_once();
 
-    platform::init_logging();
+    aloeplatform::init();
 
     // Spawn the async test
     spawn_local(async {

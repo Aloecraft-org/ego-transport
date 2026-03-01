@@ -108,7 +108,7 @@ impl TcpStreamWasi {
             .map_err(|e| TransportError::Protocol(format!("Failed to start connect: {:?}", e)))?;
 
         // Get pollable for the socket
-        let pollable = socket.subscribe();
+        // let pollable = socket.subscribe();
 
         // Poll until connection is ready
         log::info!("[WASI TCP] Polling for connection...");
@@ -352,7 +352,7 @@ impl TcpListenerWasi {
             .map_err(|e| TransportError::Protocol(format!("Failed to bind: {:?}", e)))?;
 
         // Get pollable
-        let pollable = socket.subscribe();
+        // let pollable = socket.subscribe();
 
         // Poll until bind is complete
         log::info!("[WASI TCP Listener] Polling for bind completion...");
@@ -406,7 +406,7 @@ impl TcpListenerWasi {
     }
 
     pub async fn accept(&self) -> Result<TcpStreamWasi, TransportError> {
-        let pollable = self.inner.subscribe();
+        // let pollable = self.inner.subscribe();
         loop {
             match self.inner.accept() {
                 Ok((client_socket, input, output)) => {
