@@ -10,6 +10,8 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
+# Note: protoc is required in every job because the ego_proc dev-dependency
+# generates its protobuf types at build time (prost-build).
 env:
   CARGO_TERM_COLOR: always
   # Must match the pinned wasm-bindgen version in Cargo.toml/Cargo.lock. The
@@ -28,6 +30,9 @@ jobs:
         with:
           components: rustfmt, clippy
           targets: wasm32-wasip2, wasm32-unknown-unknown
+      - uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: Swatinem/rust-cache@v2
       - name: Check formatting
         run: make fmt_check
@@ -45,6 +50,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: Swatinem/rust-cache@v2
       # Same commands as `make build_native` / `make test_native`
       # (invoked directly because GNU make isn't on the Windows runners).
@@ -66,6 +74,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-wasip2
+      - uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: Swatinem/rust-cache@v2
       - name: Install wasmtime
         uses: bytecodealliance/actions/wasmtime/setup@v1
@@ -83,6 +94,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
+      - uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: Swatinem/rust-cache@v2
       - name: Install wasm-bindgen-cli (prebuilt, pinned)
         run: |
