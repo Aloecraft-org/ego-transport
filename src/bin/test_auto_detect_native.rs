@@ -6,40 +6,40 @@
 //   2. A ws_only server rejects raw TCP connections.
 
 #[cfg(not(target_arch = "wasm32"))]
-use aloeclient::platform;
+use ego_transport::platform;
 #[cfg(not(target_arch = "wasm32"))]
-use aloeclient::platform::server::{AutoDetectListener, ServerBuilder};
+use ego_transport::platform::server::{AutoDetectListener, ServerBuilder};
 #[cfg(not(target_arch = "wasm32"))]
-use aloeclient::platform::tcp_native::TcpStreamNative;
+use ego_transport::platform::tcp_native::TcpStreamNative;
 #[cfg(not(target_arch = "wasm32"))]
-use aloeclient::platform::ws_native::WebSocketNative;
+use ego_transport::platform::ws_native::WebSocketNative;
 #[cfg(not(target_arch = "wasm32"))]
-use aloeclient::transport::Transport;
+use ego_transport::transport::Transport;
 #[cfg(not(target_arch = "wasm32"))]
 use std::time::Duration;
 
 #[cfg(not(target_arch = "wasm32"))]
 #[tokio::main]
 async fn main() {
-    aloeplatform::init();
+    ego_platform::init();
     log::info!("=== Native AutoDetect Test ===\n");
 
     // ─── Test 1: Both protocols accepted concurrently ───────────────────────
     let addr = "127.0.0.1:9990";
 
     let server_addr = addr.to_string();
-    aloeplatform::spawn(async move {
+    ego_platform::spawn(async move {
         run_echo_server(&server_addr).await;
     });
 
-    aloeplatform::sleep(Duration::from_millis(100)).await;
+    ego_platform::sleep(Duration::from_millis(100)).await;
 
     log::info!("[Test 1] Spawning concurrent TCP + WebSocket clients...\n");
 
-    let tcp_handle = aloeplatform::spawn(run_tcp_client(addr));
+    let tcp_handle = ego_platform::spawn(run_tcp_client(addr));
 
     let ws_addr = format!("ws://{}", addr);
-    let ws_handle = aloeplatform::spawn(async move { run_ws_client(&ws_addr).await });
+    let ws_handle = ego_platform::spawn(async move { run_ws_client(&ws_addr).await });
 
     let tcp_ok = tcp_handle.await.unwrap_or(false);
     let ws_ok = ws_handle.await.unwrap_or(false);
@@ -55,11 +55,11 @@ async fn main() {
 
     let ws_only_addr = "127.0.0.1:9991";
     let ws_only_addr_owned = ws_only_addr.to_string();
-    aloeplatform::spawn(async move {
+    ego_platform::spawn(async move {
         run_ws_only_server(&ws_only_addr_owned).await;
     });
 
-    aloeplatform::sleep(Duration::from_millis(100)).await;
+    ego_platform::sleep(Duration::from_millis(100)).await;
 
     let reject_ok = run_rejected_tcp_client(ws_only_addr).await;
     log::info!(
@@ -77,7 +77,7 @@ async fn main() {
         }
     );
 
-    aloeplatform::sleep(Duration::from_secs(1)).await;
+    ego_platform::sleep(Duration::from_secs(1)).await;
 }
 
 // ─── Servers ─────────────────────────────────────────────────────────────────
@@ -186,7 +186,7 @@ async fn run_tcp_client(addr: &str) -> bool {
             }
         }
 
-        aloeplatform::sleep(Duration::from_millis(100)).await;
+        ego_platform::sleep(Duration::from_millis(100)).await;
     }
 
     log::info!("[TCP Client] ✓ Complete");
@@ -231,7 +231,7 @@ async fn run_ws_client(url: &str) -> bool {
             }
         }
 
-        aloeplatform::sleep(Duration::from_millis(100)).await;
+        ego_platform::sleep(Duration::from_millis(100)).await;
     }
 
     log::info!("[WS Client] ✓ Complete");

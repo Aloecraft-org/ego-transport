@@ -63,6 +63,7 @@ impl Transport for TcpStreamNative {
                 }
                 Err(e) if e.kind() == ErrorKind::WouldBlock => {
                     // Socket not ready, yield to scheduler
+                    log::trace!("[TCP send] WouldBlock, yielding");
                     tokio::task::yield_now().await;
                 }
                 Err(e) if e.kind() == ErrorKind::Interrupted => {
@@ -90,6 +91,7 @@ impl Transport for TcpStreamNative {
                 }
                 Err(e) if e.kind() == ErrorKind::WouldBlock => {
                     // No data available yet, yield to scheduler
+                    log::trace!("[TCP recv] WouldBlock, yielding");
                     tokio::task::yield_now().await;
                 }
                 Err(e) if e.kind() == ErrorKind::Interrupted => {

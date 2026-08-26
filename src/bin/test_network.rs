@@ -1,5 +1,5 @@
 // bin/test_network.rs
-use aloeclient::platform;
+use ego_transport::platform;
 use std::time::Duration;
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -23,28 +23,28 @@ fn main() {
 }
 
 async fn run() {
-    aloeplatform::init();
+    ego_platform::init();
     log::info!("Test network starting...");
 
     // Stub listener task
-    aloeplatform::spawn(async {
+    ego_platform::spawn(async {
         log::info!("Listener task started (stub)");
         loop {
-            aloeplatform::sleep(Duration::from_secs(1)).await;
+            ego_platform::sleep(Duration::from_secs(1)).await;
         }
     });
 
     // Stub dialer task
-    aloeplatform::spawn(async {
+    ego_platform::spawn(async {
         log::info!("Dialer task started (stub)");
         loop {
-            aloeplatform::sleep(Duration::from_secs(1)).await;
+            ego_platform::sleep(Duration::from_secs(1)).await;
         }
     });
 
     // Keep main alive
     loop {
         log::info!("Main loop tick");
-        aloeplatform::sleep(Duration::from_secs(5)).await;
+        ego_platform::sleep(Duration::from_secs(5)).await;
     }
 }

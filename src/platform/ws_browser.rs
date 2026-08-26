@@ -12,12 +12,12 @@ use wasm_bindgen::prelude::*;
 use web_sys::{BinaryType, CloseEvent, ErrorEvent, MessageEvent, WebSocket};
 
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-use std::sync::mpsc::{Receiver, Sender, channel};
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 pub struct WebSocketBrowser {
     ws: WebSocket,
-    rx: Receiver<Vec<u8>>,
+    rx: UnboundedReceiver<Vec<u8>>,
     // Keep closures alive
     _onmessage: Closure<dyn FnMut(MessageEvent)>,
     _onerror: Closure<dyn FnMut(ErrorEvent)>,
@@ -40,7 +40,7 @@ impl WebSocketBrowser {
         ws.set_binary_type(BinaryType::Arraybuffer);
 
         // Create channel for receiving messages
-        let (tx, rx) = channel();
+        let (tx, rx) = unbounded_channel();
 
         // Setup onmessage callback
         let tx_msg = tx.clone();
@@ -93,7 +93,7 @@ impl WebSocketBrowser {
         while !*connected.borrow() && attempts < 500 {
             // Increased from 100 to 500
             // Yield to event loop
-            aloeplatform::sleep(std::time::Duration::from_millis(10)).await;
+            ego_platform::sleep(std::time::Duration::from_millis(10)).await;
             attempts += 1;
 
             // Check WebSocket state
@@ -143,7 +143,6 @@ impl Transport for WebSocketBrowser {
     async fn recv(&mut self, buf: &mut [u8]) -> Result<usize, TransportError> {
         log::debug!("[WS Browser] Waiting for message");
 
-        // Poll the receiver with timeout
         let mut attempts = 0;
         loop {
             match self.rx.try_recv() {
@@ -153,8 +152,10 @@ impl Transport for WebSocketBrowser {
                     buf[..n].copy_from_slice(&data[..n]);
                     return Ok(n);
                 }
-                Err(_) => {
-                    // Check if WebSocket is still open
+                Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => {
+                    return Err(TransportError::Closed);
+                }
+                Err(tokio::sync::mpsc::error::TryRecvError::Empty) => {
                     if self.ws.ready_state() == WebSocket::CLOSED {
                         return Err(TransportError::Closed);
                     }
@@ -164,8 +165,7 @@ impl Transport for WebSocketBrowser {
                         return Err(TransportError::Protocol("Receive timeout".to_string()));
                     }
 
-                    // Yield to event loop
-                    aloeplatform::sleep(std::time::Duration::from_millis(10)).await;
+                    ego_platform::sleep(std::time::Duration::from_millis(10)).await;
                 }
             }
         }

@@ -2,11 +2,11 @@
 
 // Browser implementation
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-use aloeclient::platform;
+use ego_transport::platform;
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-use aloeclient::platform::ws_browser::WebSocketBrowser;
+use ego_transport::platform::ws_browser::WebSocketBrowser;
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-use aloeclient::transport::Transport;
+use ego_transport::transport::Transport;
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 use wasm_bindgen::prelude::*;
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
@@ -18,7 +18,7 @@ pub fn run() {
     // Setup panic hook for better error messages
     console_error_panic_hook::set_once();
 
-    aloeplatform::init();
+    ego_platform::init();
 
     // Spawn the async test
     spawn_local(async {
@@ -67,7 +67,7 @@ async fn run_test() {
                 }
 
                 // Small delay between messages
-                aloeplatform::sleep(std::time::Duration::from_millis(500)).await;
+                ego_platform::sleep(std::time::Duration::from_millis(500)).await;
             }
 
             log::info!("[Browser Client] ✓ Test complete!");

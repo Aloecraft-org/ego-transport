@@ -1,14 +1,14 @@
 // bin/test_server.rs
-use aloeclient::platform;
-use aloeclient::platform::server::ServerBuilder;
-use aloeclient::transport::Transport;
+use ego_transport::platform;
+use ego_transport::platform::server::ServerBuilder;
+use ego_transport::transport::Transport;
 use std::time::Duration;
 
 #[cfg(not(target_arch = "wasm32"))]
-use aloeclient::platform::tcp_native::{TcpListenerNative, TcpStreamNative};
+use ego_transport::platform::tcp_native::{TcpListenerNative, TcpStreamNative};
 
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
-use aloeclient::platform::tcp_wasi::{TcpListenerWasi, TcpStreamWasi};
+use ego_transport::platform::tcp_wasi::{TcpListenerWasi, TcpStreamWasi};
 
 // ===== NATIVE =====
 #[cfg(not(target_arch = "wasm32"))]
@@ -37,19 +37,19 @@ fn main() {
 // =====================================
 #[cfg(not(target_arch = "wasm32"))]
 async fn run_native() {
-    aloeplatform::init();
+    ego_platform::init();
     log::info!("=== Native Server Test with ServerBuilder ===");
 
     let addr = "127.0.0.1:9997";
 
     // Start server in background
     let server_addr = addr.to_string();
-    aloeplatform::spawn(async move {
+    ego_platform::spawn(async move {
         run_native_server(&server_addr).await;
     });
 
     // Give server time to start
-    aloeplatform::sleep(Duration::from_millis(100)).await;
+    ego_platform::sleep(Duration::from_millis(100)).await;
 
     // Run multiple clients concurrently
     log::info!("[Native] Spawning 3 concurrent clients...");
@@ -57,7 +57,7 @@ async fn run_native() {
     let mut handles = vec![];
     for client_id in 1..=3 {
         let addr = addr.to_string();
-        let handle = aloeplatform::spawn(async move {
+        let handle = ego_platform::spawn(async move {
             run_native_client(&addr, client_id).await;
         });
         handles.push(handle);
@@ -69,7 +69,7 @@ async fn run_native() {
     }
 
     log::info!("=== Native Test Complete ===");
-    aloeplatform::sleep(Duration::from_secs(1)).await;
+    ego_platform::sleep(Duration::from_secs(1)).await;
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -147,7 +147,7 @@ async fn run_native_client(addr: &str, client_id: u32) {
                     }
                 }
 
-                aloeplatform::sleep(Duration::from_millis(100)).await;
+                ego_platform::sleep(Duration::from_millis(100)).await;
             }
 
             log::info!("[Client #{}] ✓ Complete", client_id);
@@ -163,7 +163,7 @@ async fn run_native_client(addr: &str, client_id: u32) {
 // =====================================
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
 async fn run_wasi() {
-    aloeplatform::init();
+    ego_platform::init();
     log::info!("=== WASI Server Test with ServerBuilder ===");
 
     let addr = "127.0.0.1:9997";

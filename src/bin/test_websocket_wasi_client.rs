@@ -2,21 +2,21 @@
 
 // Native: Run server
 #[cfg(not(target_arch = "wasm32"))]
-use aloeclient::platform;
+use ego_transport::platform;
 #[cfg(not(target_arch = "wasm32"))]
-use aloeclient::platform::tcp_native::TcpListenerNative;
+use ego_transport::platform::tcp_native::TcpListenerNative;
 #[cfg(not(target_arch = "wasm32"))]
-use aloeclient::transport::Transport;
+use ego_transport::transport::Transport;
 #[cfg(not(target_arch = "wasm32"))]
 use std::time::Duration;
 
 // WASI: Run client
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
-use aloeclient::platform;
+use ego_transport::platform;
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
-use aloeclient::platform::ws_wasi::WebSocketWasi;
+use ego_transport::platform::ws_wasi::WebSocketWasi;
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
-use aloeclient::transport::Transport;
+use ego_transport::transport::Transport;
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
 use std::time::Duration;
 
@@ -24,7 +24,7 @@ use std::time::Duration;
 #[cfg(not(target_arch = "wasm32"))]
 #[tokio::main]
 async fn main() {
-    aloeplatform::init();
+    ego_platform::init();
     log::info!("=== Native WebSocket Server for WASI Client ===");
 
     let addr = "127.0.0.1:9995";
@@ -42,7 +42,7 @@ async fn run_native_server(addr: &str) {
             Ok(mut ws) => {
                 log::info!("[WS Server] Client connected");
 
-                aloeplatform::spawn(async move {
+                ego_platform::spawn(async move {
                     let mut buf = [0u8; 1024];
                     let mut msg_count = 0;
 
@@ -95,7 +95,7 @@ fn main() {
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
 async fn run_wasi_client() {
     println!("run_wasi_client called");
-    aloeplatform::init();
+    ego_platform::init();
     println!("Logging initialized");
     log::info!("=== WASI WebSocket Client Test ===");
 
@@ -132,7 +132,7 @@ async fn run_wasi_client() {
                     }
                 }
 
-                aloeplatform::sleep(Duration::from_millis(500)).await;
+                ego_platform::sleep(Duration::from_millis(500)).await;
             }
 
             log::info!("[WS WASI Client] ✓ Test complete!");
@@ -142,7 +142,7 @@ async fn run_wasi_client() {
         }
     }
 
-    aloeplatform::sleep(Duration::from_secs(1)).await;
+    ego_platform::sleep(Duration::from_secs(1)).await;
 }
 
 // Stub for browser

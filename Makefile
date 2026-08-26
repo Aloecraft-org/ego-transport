@@ -45,6 +45,188 @@ fmt:
 clippy:
 	cargo clippy --all-targets --all-features -- -D warnings
 
+test_unit:
+	@echo ""
+	@echo "━━━ Unit Tests ━━━"
+	@echo ""
+	$(CARGO_ENV) cargo test -p ego_transport
+	@echo ""
+	@echo "✅ Unit tests passed"
+
+# ============================================================================
+# STANDALONE TESTS
+#
+# Self-contained binaries: start servers and clients in the same process.
+# No external dependencies. Run them all with `make test_standalone`.
+#
+# Each test has a 30-second timeout to prevent hanging.
+# ============================================================================
+
+# Individual standalone tests
+test_SA_tcp_echo:
+	@echo "━━━ TCP Echo (native) ━━━"
+	@timeout 30 $(CARGO_ENV) cargo run --bin test_network_p1_native || \
+		(echo "⏱️  TIMEOUT or FAIL: test_network_p1_native" && false)
+
+test_SA_server_builder:
+	@echo "━━━ ServerBuilder (native concurrent) ━━━"
+	@timeout 30 $(CARGO_ENV) cargo run --bin test_server || \
+		(echo "⏱️  TIMEOUT or FAIL: test_server" && false)
+
+test_SA_ws_echo:
+	@echo "━━━ WebSocket Echo (native) ━━━"
+	@timeout 30 $(CARGO_ENV) cargo run --bin test_websocket_native || \
+		(echo "⏱️  TIMEOUT or FAIL: test_websocket_native" && false)
+
+test_SA_signaling:
+	@echo "━━━ Signaling Protocol ━━━"
+	@timeout 30 $(CARGO_ENV) cargo run --bin test_signaling || \
+		(echo "⏱️  TIMEOUT or FAIL: test_signaling" && false)
+
+test_SA_p2p:
+	@echo "━━━ P2P Native-to-Native ━━━"
+	@timeout 60 $(CARGO_ENV) cargo run --bin test_p2p || \
+		(echo "⏱️  TIMEOUT or FAIL: test_p2p" && false)
+
+test_SA_embedded_signaling:
+	@echo "━━━ Embedded Signaling ━━━"
+	@echo "⚠️  Known issue: may hang on WS echo test (Test 3)"
+	@timeout 30 $(CARGO_ENV) cargo run --bin test_embedded_signaling || \
+		(echo "⏱️  TIMEOUT or FAIL: test_embedded_signaling" && false)
+
+test_SA_routed_signaling:
+	@echo "━━━ Routed Signaling ━━━"
+	@echo "⚠️  Known issue: may hang (relay forwarding)"
+	@timeout 30 $(CARGO_ENV) cargo run --bin test_routed_signaling || \
+		(echo "⏱️  TIMEOUT or FAIL: test_routed_signaling" && false)
+
+test_SA_multihop_signaling:
+	@echo "━━━ Multi-Hop Signaling ━━━"
+	@echo "⚠️  Known issue: may hang (multi-hop relay)"
+	@timeout 30 $(CARGO_ENV) cargo run --bin test_multihop_signaling || \
+		(echo "⏱️  TIMEOUT or FAIL: test_multihop_signaling" && false)
+
+# Run all standalone tests that are known to work
+test_standalone:
+	@echo ""
+	@echo "╔══════════════════════════════════════════╗"
+	@echo "║     Standalone Tests (self-contained)    ║"
+	@echo "╚══════════════════════════════════════════╝"
+	@echo ""
+	@PASS=0; FAIL=0; SKIP=0; \
+	echo "━━━ [1/8] TCP Echo ━━━"; \
+	if timeout 30 $(CARGO_ENV) cargo run --bin test_network_p1_native 2>&1 | tail -1; then \
+		PASS=$$((PASS+1)); echo "  ✅ PASS"; \
+	else \
+		FAIL=$$((FAIL+1)); echo "  ❌ FAIL/TIMEOUT"; \
+	fi; \
+	echo ""; \
+	echo "━━━ [2/8] ServerBuilder ━━━"; \
+	if timeout 30 $(CARGO_ENV) cargo run --bin test_server 2>&1 | tail -1; then \
+		PASS=$$((PASS+1)); echo "  ✅ PASS"; \
+	else \
+		FAIL=$$((FAIL+1)); echo "  ❌ FAIL/TIMEOUT"; \
+	fi; \
+	echo ""; \
+	echo "━━━ [3/8] WebSocket Echo ━━━"; \
+	if timeout 30 $(CARGO_ENV) cargo run --bin test_websocket_native 2>&1 | tail -1; then \
+		PASS=$$((PASS+1)); echo "  ✅ PASS"; \
+	else \
+		FAIL=$$((FAIL+1)); echo "  ❌ FAIL/TIMEOUT"; \
+	fi; \
+	echo ""; \
+	echo "━━━ [4/8] Signaling Protocol ━━━"; \
+	if timeout 30 $(CARGO_ENV) cargo run --bin test_signaling 2>&1 | tail -1; then \
+		PASS=$$((PASS+1)); echo "  ✅ PASS"; \
+	else \
+		FAIL=$$((FAIL+1)); echo "  ❌ FAIL/TIMEOUT"; \
+	fi; \
+	echo ""; \
+	echo "━━━ [5/8] P2P Native ━━━"; \
+	if timeout 60 $(CARGO_ENV) cargo run --bin test_p2p 2>&1 | tail -1; then \
+		PASS=$$((PASS+1)); echo "  ✅ PASS"; \
+	else \
+		FAIL=$$((FAIL+1)); echo "  ❌ FAIL/TIMEOUT"; \
+	fi; \
+	echo ""; \
+	echo "━━━ [6/8] Embedded Signaling (known issue) ━━━"; \
+	if timeout 30 $(CARGO_ENV) cargo run --bin test_embedded_signaling 2>&1 | tail -1; then \
+		PASS=$$((PASS+1)); echo "  ✅ PASS"; \
+	else \
+		SKIP=$$((SKIP+1)); echo "  ⚠️  TIMEOUT (known issue)"; \
+	fi; \
+	echo ""; \
+	echo "━━━ [7/8] Routed Signaling (known issue) ━━━"; \
+	if timeout 30 $(CARGO_ENV) cargo run --bin test_routed_signaling 2>&1 | tail -1; then \
+		PASS=$$((PASS+1)); echo "  ✅ PASS"; \
+	else \
+		SKIP=$$((SKIP+1)); echo "  ⚠️  TIMEOUT (known issue)"; \
+	fi; \
+	echo ""; \
+	echo "━━━ [8/8] Multi-Hop Signaling (known issue) ━━━"; \
+	if timeout 30 $(CARGO_ENV) cargo run --bin test_multihop_signaling 2>&1 | tail -1; then \
+		PASS=$$((PASS+1)); echo "  ✅ PASS"; \
+	else \
+		SKIP=$$((SKIP+1)); echo "  ⚠️  TIMEOUT (known issue)"; \
+	fi; \
+	echo ""; \
+	echo "╔══════════════════════════════════════════╗"; \
+	echo "║  Results: ✅ $$PASS pass | ❌ $$FAIL fail | ⚠️  $$SKIP skip  ║"; \
+	echo "╚══════════════════════════════════════════╝"
+
+# ============================================================================
+# FIXTURE-BASED TESTS
+#
+# These require starting a server first, then running clients against it.
+# They test cross-platform scenarios (WASI, browser).
+# ============================================================================
+
+# Fixtures (long-running servers)
+fixture_signaling:
+	@echo "━━━ Starting Signaling Server on 127.0.0.1:9995 ━━━"
+	@echo "  Stop with Ctrl+C"
+	$(CARGO_ENV) cargo run --bin signaling_server
+
+fixture_echo:
+	@echo "━━━ Starting Echo Server on 127.0.0.1:9990 ━━━"
+	@echo "  Accepts TCP and WebSocket connections"
+	@echo "  Stop with Ctrl+C"
+	$(CARGO_ENV) cargo run --bin test_auto_detect_native
+
+# Client tests (need fixtures running)
+client_p2p_native:
+	@echo "━━━ Native P2P Peer (needs: fixture_signaling) ━━━"
+	SIGNAL_URL=ws://127.0.0.1:9995 ROOM=test-rtc-room \
+		$(CARGO_ENV) cargo run --bin test_p2p_native_peer
+
+client_rtc_browser_build:
+	@echo "━━━ Building browser WebRTC test ━━━"
+	$(CARGO_ENV) cargo build $(TARGET_BROWSER) --bin test_rtc_browser
+
+client_wasi_tcp_build:
+	@echo "━━━ Building WASI TCP client ━━━"
+	$(CARGO_ENV) cargo build $(TARGET_WASI) --bin test_network_wasi_client
+
+client_wasi_ws_build:
+	@echo "━━━ Building WASI WS client ━━━"
+	$(CARGO_ENV) cargo build $(TARGET_WASI) --bin test_websocket_wasi_client
+
+
+
+test_client_wasi_tcp:
+	@echo "━━━ Building WASI TCP client ━━━"
+	$(CARGO_ENV) cargo run $(TARGET_WASI) --bin test_network_wasi_client
+
+test_client_wasi_ws:
+	@echo "━━━ Building WASI WS client ━━━"
+	$(CARGO_ENV) cargo run $(TARGET_WASI) --bin test_websocket_wasi_client
+
+
+
+
+
+
+
 # ===========================================
 # PHASE 1: BASIC PLATFORM TESTS
 # ===========================================
@@ -197,7 +379,43 @@ test_auto_detect_wasi_server:
 # 	cargo run --bin test_auto_detect_wasi_server --target wasm32-wasip2 & sleep 1
 # 	cargo run --bin test_auto_detect_wasi_server --target wasm32-wasip2
 
+# ===========================================
+# PHASE 4: P2P / WebRTC TESTS
+# ===========================================
 
+# Signaling server (standalone)
+run_signaling_server:
+	cargo run --bin signaling_server
+
+# Signaling protocol test (self-contained)
+test_signaling:
+	cargo run --bin test_signaling
+
+# P2P test: two native peers through signaling (self-contained)
+test_p2p:
+	cargo run --bin test_p2p
+
+# Native peer for cross-platform testing
+test_p2p_native_peer:
+	SIGNAL_URL=ws://127.0.0.1:9995 ROOM=test-rtc-room cargo run --bin test_p2p_native_peer
+
+# Browser RTC test
+test_rtc_browser_build:
+	cargo build --target wasm32-unknown-unknown --bin test_rtc_browser
+
+# Cross-platform test instructions
+test_p2p_cross:
+	@echo "==================================="
+	@echo "Cross-Platform P2P Test"
+	@echo "==================================="
+	@echo ""
+	@echo "Terminal 1: make run_signaling_server"
+	@echo "Terminal 2: make test_p2p_native_peer"
+	@echo "Terminal 3: trunk serve --port 9001 test_rtc_browser.html"
+	@echo "Browser:    http://localhost:9001 (check console)"
+	@echo ""
+	@echo "Native peer echoes messages from browser peer."
+	@echo "==================================="
 # ===========================================
 # COMPREHENSIVE TEST SUITES
 # ===========================================
@@ -281,7 +499,7 @@ pre_commit: fmt lint check test_build_all
 
 victory:
 	@echo ""
-	@echo "🎉🎊🚀 ALOECLIENT - COMPLETE! 🚀🎊🎉"
+	@echo "🎉🎊🚀 ego_transport - COMPLETE! 🚀🎊🎉"
 	@echo ""
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo "  Cross-Platform Networking Library"

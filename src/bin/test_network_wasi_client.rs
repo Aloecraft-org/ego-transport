@@ -1,15 +1,15 @@
 // bin/test_network_wasi_client.rs
-use aloeclient::platform;
-use aloeclient::transport::{Transport, TransportError};
+use ego_transport::platform;
+use ego_transport::transport::{Transport, TransportError};
 use std::time::Duration;
 
 #[cfg(not(target_arch = "wasm32"))]
-use aloeclient::platform::tcp_native::TcpStreamNative;
+use ego_transport::platform::tcp_native::TcpStreamNative;
 #[cfg(not(target_arch = "wasm32"))]
 use std::net::TcpListener;
 
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
-use aloeclient::platform::tcp_wasi::TcpStreamWasi;
+use ego_transport::platform::tcp_wasi::TcpStreamWasi;
 
 // Native: Run the server
 #[cfg(not(target_arch = "wasm32"))]
@@ -22,6 +22,7 @@ async fn main() {
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
 fn main() {
     tokio::runtime::Builder::new_current_thread()
+        .enable_all()
         .build()
         .unwrap()
         .block_on(run_wasi_client());
@@ -34,7 +35,7 @@ fn main() {
 
 #[cfg(not(target_arch = "wasm32"))]
 async fn run_native_server() {
-    aloeplatform::init();
+    ego_platform::init();
     log::info!("=== Native TCP Server for WASI Client Test ===");
 
     let addr = "127.0.0.1:9999";
@@ -70,7 +71,7 @@ async fn run_native_server() {
                 log::info!("[Server] ✓ Accepted connection from {}", peer_addr);
 
                 // Spawn handler for this connection
-                aloeplatform::spawn(async move {
+                ego_platform::spawn(async move {
                     let mut transport = TcpStreamNative { inner: stream };
                     transport.inner.set_nonblocking(true).ok();
 
@@ -121,7 +122,7 @@ async fn run_native_server() {
 
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
 async fn run_wasi_client() {
-    aloeplatform::init();
+    ego_platform::init();
     log::info!("=== WASI TCP Client Test ===");
 
     let addr = "127.0.0.1:9999";
@@ -144,7 +145,7 @@ async fn run_wasi_client() {
                 log::info!("[WASI Client] ✓ Sent {} bytes", msg.len());
 
                 // Give server time to echo back
-                aloeplatform::sleep(Duration::from_millis(50)).await;
+                ego_platform::sleep(Duration::from_millis(50)).await;
 
                 // Receive echo
                 let mut buf = [0u8; 1024];
@@ -165,7 +166,7 @@ async fn run_wasi_client() {
                     }
                 }
 
-                aloeplatform::sleep(Duration::from_millis(500)).await;
+                ego_platform::sleep(Duration::from_millis(500)).await;
             }
 
             log::info!("[WASI Client] ✓ Test complete!");
@@ -176,5 +177,5 @@ async fn run_wasi_client() {
     }
 
     // Give logs time to flush
-    aloeplatform::sleep(Duration::from_secs(1)).await;
+    ego_platform::sleep(Duration::from_secs(1)).await;
 }

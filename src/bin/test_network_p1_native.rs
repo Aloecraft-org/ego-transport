@@ -1,10 +1,10 @@
 // bin/test_network.rs
-use aloeclient::platform;
-use aloeclient::transport::{Transport, TransportError};
+use ego_transport::platform;
+use ego_transport::transport::{Transport, TransportError};
 use std::time::Duration;
 
 #[cfg(not(target_arch = "wasm32"))]
-use aloeclient::platform::tcp_native::TcpStreamNative;
+use ego_transport::platform::tcp_native::TcpStreamNative;
 
 #[cfg(not(target_arch = "wasm32"))]
 use std::net::TcpListener;
@@ -30,14 +30,14 @@ fn main() {
 
 #[cfg(not(target_arch = "wasm32"))]
 async fn run_native() {
-    aloeplatform::init();
+    ego_platform::init();
     log::info!("=== Native TCP Test Starting ===");
 
     let addr = "127.0.0.1:9999";
 
     // Spawn listener task
     let listener_addr = addr.to_string();
-    aloeplatform::spawn(async move {
+    ego_platform::spawn(async move {
         log::info!("[Listener] Starting on {}", listener_addr);
 
         let listener = TcpListener::bind(&listener_addr).expect("Failed to bind listener");
@@ -53,7 +53,7 @@ async fn run_native() {
                     log::info!("[Listener] Accepted connection from {}", peer_addr);
 
                     // Spawn handler for this connection
-                    aloeplatform::spawn(async move {
+                    ego_platform::spawn(async move {
                         let mut transport = TcpStreamNative { inner: stream };
                         transport.inner.set_nonblocking(true).ok();
 
@@ -99,11 +99,11 @@ async fn run_native() {
     });
 
     // Give listener time to start
-    aloeplatform::sleep(Duration::from_millis(100)).await;
+    ego_platform::sleep(Duration::from_millis(100)).await;
 
     // Spawn client task
     let client_addr = addr.to_string();
-    aloeplatform::spawn(async move {
+    ego_platform::spawn(async move {
         log::info!("[Client] Connecting to {}", client_addr);
 
         match TcpStreamNative::connect(&client_addr).await {
@@ -133,7 +133,7 @@ async fn run_native() {
                         }
                     }
 
-                    aloeplatform::sleep(Duration::from_secs(1)).await;
+                    ego_platform::sleep(Duration::from_secs(1)).await;
                 }
 
                 log::info!("[Client] Test complete!");
@@ -146,7 +146,7 @@ async fn run_native() {
 
     // Keep main alive to see the test complete
     for i in 0..10 {
-        aloeplatform::sleep(Duration::from_secs(1)).await;
+        ego_platform::sleep(Duration::from_secs(1)).await;
         if i == 0 {
             log::info!("[Main] Test running...");
         }
@@ -157,18 +157,18 @@ async fn run_native() {
 
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
 async fn run_wasi() {
-    aloeplatform::init();
+    ego_platform::init();
     log::info!("WASI test - not implemented yet");
     loop {
-        aloeplatform::sleep(Duration::from_secs(5)).await;
+        ego_platform::sleep(Duration::from_secs(5)).await;
     }
 }
 
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 async fn run_browser() {
-    aloeplatform::init();
+    ego_platform::init();
     log::info!("Browser test - not implemented yet");
     loop {
-        aloeplatform::sleep(Duration::from_secs(5)).await;
+        ego_platform::sleep(Duration::from_secs(5)).await;
     }
 }

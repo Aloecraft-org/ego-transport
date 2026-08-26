@@ -16,13 +16,13 @@
 // Native imports — client side
 // ═══════════════════════════════════════════════════════════════════════════════
 #[cfg(not(target_arch = "wasm32"))]
-use aloeclient::platform;
+use ego_transport::platform;
 #[cfg(not(target_arch = "wasm32"))]
-use aloeclient::platform::tcp_native::TcpStreamNative;
+use ego_transport::platform::tcp_native::TcpStreamNative;
 #[cfg(not(target_arch = "wasm32"))]
-use aloeclient::platform::ws_native::WebSocketNative;
+use ego_transport::platform::ws_native::WebSocketNative;
 #[cfg(not(target_arch = "wasm32"))]
-use aloeclient::transport::Transport;
+use ego_transport::transport::Transport;
 #[cfg(not(target_arch = "wasm32"))]
 use std::time::Duration;
 
@@ -30,11 +30,11 @@ use std::time::Duration;
 // WASI imports — server side
 // ═══════════════════════════════════════════════════════════════════════════════
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
-use aloeclient::platform;
+use ego_transport::platform;
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
-use aloeclient::platform::server::{AutoDetectListener, Listener};
+use ego_transport::platform::server::{AutoDetectListener, Listener};
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
-use aloeclient::transport::Transport;
+use ego_transport::transport::Transport;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // NATIVE — sequential clients
@@ -43,14 +43,14 @@ use aloeclient::transport::Transport;
 #[cfg(not(target_arch = "wasm32"))]
 #[tokio::main]
 async fn main() {
-    aloeplatform::init();
+    ego_platform::init();
     log::info!("=== Native Clients for WASI AutoDetect Server ===\n");
 
     let addr = "127.0.0.1:9992";
 
     // Give the WASI server time to bind and start listening.
     log::info!("[Clients] Waiting 1s for WASI server to start...");
-    aloeplatform::sleep(Duration::from_secs(1)).await;
+    ego_platform::sleep(Duration::from_secs(1)).await;
 
     // ─── Connection 1: TCP ───────────────────────────────────────────────────
     log::info!("\n[Clients] ── TCP client ──");
@@ -62,7 +62,7 @@ async fn main() {
 
     // Brief pause — WASI server is sequential, give it a moment to loop back
     // to accept after the TCP handler completes.
-    aloeplatform::sleep(Duration::from_millis(500)).await;
+    ego_platform::sleep(Duration::from_millis(500)).await;
 
     // ─── Connection 2: WebSocket ─────────────────────────────────────────────
     log::info!("\n[Clients] ── WebSocket client ──");
@@ -75,7 +75,7 @@ async fn main() {
         if tcp_ok && ws_ok { "PASSED" } else { "FAILED" }
     );
 
-    aloeplatform::sleep(Duration::from_secs(1)).await;
+    ego_platform::sleep(Duration::from_secs(1)).await;
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -114,7 +114,7 @@ async fn run_tcp_client(addr: &str) -> bool {
                 return false;
             }
         }
-        aloeplatform::sleep(Duration::from_millis(200)).await;
+        ego_platform::sleep(Duration::from_millis(200)).await;
     }
 
     log::info!("[TCP Client] ✓ Complete");
@@ -157,7 +157,7 @@ async fn run_ws_client(url: &str) -> bool {
                 return false;
             }
         }
-        aloeplatform::sleep(Duration::from_millis(200)).await;
+        ego_platform::sleep(Duration::from_millis(200)).await;
     }
 
     log::info!("[WS Client] ✓ Complete");
@@ -178,7 +178,7 @@ fn main() {
 
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
 async fn run_wasi_server() {
-    aloeplatform::init();
+    ego_platform::init();
     log::info!("=== WASI AutoDetect Server Test ===\n");
 
     let addr = "127.0.0.1:9992";

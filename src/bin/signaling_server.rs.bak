@@ -1,0 +1,267 @@
+// bin/signaling_server.rs
+//
+// WebRTC signaling server for peer connection establishment.
+//
+// Accepts WebSocket (or raw TCP) connections via AutoDetectListener.
+// Peers join rooms and exchange SDP offers/answers and ICE candidates.
+// Once the direct connection is established, peers disconnect from the
+// signaling server and communicate directly.
+//
+// Usage:
+//   cargo run --bin signaling_server
+//   # Listens on 127.0.0.1:9995 (configurable via SIGNAL_ADDR env var)
+//
+// Protocol:
+//   1. Client connects and sends "JOIN:room_name:"
+//   2. Server waits until two peers are in the room
+//   3. Server sends "READY:room_name:offerer" to the first peer
+//      and "READY:room_name:answerer" to the second
+//   4. Peers exchange OFFER, ANSWER, ICE messages through the server
+//   5. Server relays each message to the other peer in the room
+//   6. When a peer disconnects, server sends PEER_LEFT to the other
+
+#[cfg(not(target_arch = "wasm32"))]
+use std::collections::HashMap;
+#[cfg(not(target_arch = "wasm32"))]
+use std::sync::Arc;
+#[cfg(not(target_arch = "wasm32"))]
+use tokio::sync::Mutex;
+
+#[cfg(not(target_arch = "wasm32"))]
+use ego_transport::platform::server::{AutoDetectListener, ServerBuilder};
+#[cfg(not(target_arch = "wasm32"))]
+use ego_transport::transport::{Transport, TransportError};
+#[cfg(not(target_arch = "wasm32"))]
+use ego_transport::transport::rtc_signaling::{PeerRole, SignalingKind, SignalingMessage};
+
+// ─── Room State ──────────────────────────────────────────────────────────────
+
+#[cfg(not(target_arch = "wasm32"))]
+struct Room {
+    /// Channel to send messages to the first peer (the offerer).
+    peer_a_tx: tokio::sync::mpsc::UnboundedSender<String>,
+    /// Channel to send messages to the second peer (the answerer).
+    /// None until the second peer joins.
+    peer_b_tx: Option<tokio::sync::mpsc::UnboundedSender<String>>,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+type RoomMap = Arc<Mutex<HashMap<String, Room>>>;
+
+// ─── Main ────────────────────────────────────────────────────────────────────
+
+#[cfg(not(target_arch = "wasm32"))]
+#[tokio::main]
+async fn main() {
+    aloeplatform::init();
+
+    let addr = std::env::var("SIGNAL_ADDR").unwrap_or_else(|_| "127.0.0.1:9995".to_string());
+    log::info!("[Signaling] Starting on {}", addr);
+
+    let rooms: RoomMap = Arc::new(Mutex::new(HashMap::new()));
+
+    let listener = AutoDetectListener::bind(&addr)
+        .await
+        .expect("Failed to bind signaling server");
+
+    if let Err(e) = ServerBuilder::new(listener)
+        .concurrent()
+        .run(move |transport| {
+            let rooms = rooms.clone();
+            async move {
+                if let Err(e) = handle_peer(transport, rooms).await {
+                    log::debug!("[Signaling] Peer handler ended: {:?}", e);
+                }
+            }
+        })
+        .await
+    {
+        log::error!("[Signaling] Server error: {:?}", e);
+    }
+}
+
+// ─── Peer Handler ────────────────────────────────────────────────────────────
+
+#[cfg(not(target_arch = "wasm32"))]
+async fn handle_peer(
+    mut transport: Box<dyn Transport>,
+    rooms: RoomMap,
+) -> Result<(), TransportError> {
+    // Step 1: Wait for JOIN message
+    let mut buf = [0u8; 4096];
+    let n = transport.recv(&mut buf).await?;
+    let text = String::from_utf8_lossy(&buf[..n]);
+
+    let join_msg = SignalingMessage::deserialize(&text).ok_or_else(|| {
+        TransportError::Protocol(format!("Expected JOIN message, got: {}", text))
+    })?;
+
+    if join_msg.kind != SignalingKind::Join {
+        let err = SignalingMessage::error("", "First message must be JOIN");
+        transport.send(err.serialize().as_bytes()).await.ok();
+        return Err(TransportError::Protocol("Expected JOIN".to_string()));
+    }
+
+    let room_name = join_msg.room.clone();
+    log::info!("[Signaling] Peer joining room: {}", room_name);
+
+    // Step 2: Register in room, get our message channel
+    let (my_tx, mut my_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
+    let role;
+
+    {
+        let mut map = rooms.lock().await;
+
+        if let Some(room) = map.get_mut(&room_name) {
+            if room.peer_b_tx.is_some() {
+                // Room is full
+                let err = SignalingMessage::error(&room_name, "Room is full");
+                transport.send(err.serialize().as_bytes()).await.ok();
+                return Err(TransportError::Protocol("Room full".to_string()));
+            }
+
+            // We're the second peer (answerer)
+            room.peer_b_tx = Some(my_tx);
+            role = PeerRole::Answerer;
+
+            // Notify both peers
+            let ready_a = SignalingMessage::ready(&room_name, PeerRole::Offerer);
+            let ready_b = SignalingMessage::ready(&room_name, PeerRole::Answerer);
+
+            room.peer_a_tx.send(ready_a.serialize()).ok();
+            // We'll send our Ready directly below since we hold the transport
+            transport.send(ready_b.serialize().as_bytes()).await?;
+
+            log::info!(
+                "[Signaling] Room '{}' is ready — two peers matched",
+                room_name
+            );
+        } else {
+            // We're the first peer (offerer)
+            map.insert(
+                room_name.clone(),
+                Room {
+                    peer_a_tx: my_tx,
+                    peer_b_tx: None,
+                },
+            );
+            role = PeerRole::Offerer;
+            log::info!(
+                "[Signaling] Room '{}' created — waiting for second peer",
+                room_name
+            );
+        }
+    }
+
+    // Step 3: Relay loop — forward messages between peers
+    //
+    // We use tokio::select! to concurrently:
+    //   a) Read messages from our peer's transport and send to the other peer
+    //   b) Read messages from the other peer's channel and send to our transport
+
+    let relay_result = relay_loop(&mut transport, &mut my_rx, &rooms, &room_name, role).await;
+
+    // Step 4: Cleanup — notify the other peer and remove from room
+    {
+        let mut map = rooms.lock().await;
+        if let Some(room) = map.get(&room_name) {
+            let peer_left = SignalingMessage::peer_left(&room_name);
+            let msg = peer_left.serialize();
+
+            // Send to whichever peer is still around
+            match role {
+                PeerRole::Offerer => {
+                    if let Some(tx) = &room.peer_b_tx {
+                        tx.send(msg).ok();
+                    }
+                }
+                PeerRole::Answerer => {
+                    room.peer_a_tx.send(msg).ok();
+                }
+            }
+        }
+
+        // If we were the only one (offerer and no answerer yet), remove the room.
+        // If both peers have left, the room will be cleaned up when the other
+        // handler exits.
+        if let Some(room) = map.get(&room_name) {
+            let a_closed = room.peer_a_tx.is_closed();
+            let b_closed = room.peer_b_tx.as_ref().map_or(true, |tx| tx.is_closed());
+            if a_closed && b_closed {
+                map.remove(&room_name);
+                log::info!("[Signaling] Room '{}' removed (both peers left)", room_name);
+            }
+        }
+    }
+
+    relay_result
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+async fn relay_loop(
+    transport: &mut Box<dyn Transport>,
+    my_rx: &mut tokio::sync::mpsc::UnboundedReceiver<String>,
+    rooms: &RoomMap,
+    room_name: &str,
+    role: PeerRole,
+) -> Result<(), TransportError> {
+    let mut buf = [0u8; 65536]; // SDP can be large
+
+    loop {
+        tokio::select! {
+            // Message from our peer — relay to the other peer
+            result = transport.recv(&mut buf) => {
+                let n = result?;
+                let text = String::from_utf8_lossy(&buf[..n]).to_string();
+
+                if let Some(msg) = SignalingMessage::deserialize(&text) {
+                    log::debug!(
+                        "[Signaling] Room '{}': {:?} from {:?}",
+                        room_name, msg.kind, role
+                    );
+
+                    // Get the other peer's sender
+                    let map = rooms.lock().await;
+                    if let Some(room) = map.get(room_name) {
+                        let other_tx = match role {
+                            PeerRole::Offerer => room.peer_b_tx.as_ref(),
+                            PeerRole::Answerer => Some(&room.peer_a_tx),
+                        };
+
+                        if let Some(tx) = other_tx {
+                            if tx.send(text).is_err() {
+                                log::debug!("[Signaling] Other peer disconnected");
+                                return Ok(());
+                            }
+                        } else {
+                            log::debug!("[Signaling] Other peer not yet connected");
+                        }
+                    }
+                } else {
+                    log::warn!("[Signaling] Unparseable message from {:?}: {}", role, text);
+                }
+            }
+
+            // Message from the other peer — forward to our transport
+            result = my_rx.recv() => {
+                match result {
+                    Some(msg) => {
+                        transport.send(msg.as_bytes()).await?;
+                    }
+                    None => {
+                        // Channel closed — other peer left
+                        log::debug!("[Signaling] Channel closed for {:?}", role);
+                        return Ok(());
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ─── Platform stubs ──────────────────────────────────────────────────────────
+
+#[cfg(target_arch = "wasm32")]
+fn main() {
+    panic!("signaling_server is native-only");
+}

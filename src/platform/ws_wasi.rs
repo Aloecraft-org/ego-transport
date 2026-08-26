@@ -182,7 +182,7 @@ impl Transport for WebSocketWasi {
                 },
                 Err(tungstenite::Error::Io(e)) if e.kind() == std::io::ErrorKind::WouldBlock => {
                     // No data available, yield and retry
-                    aloeplatform::sleep(tokio::time::Duration::from_millis(10)).await;
+                    ego_platform::sleep(std::time::Duration::from_millis(10)).await;
                     continue;
                 }
                 Err(e) => {

@@ -1,4 +1,6 @@
-# AloeCraft Client - Cross-Platform Networking Library
+# ego-transport - Cross-Platform Networking Library
+
+MIKE: This whole document is pretty messed up... have fun :D
 
 A production-ready, cross-platform networking library for Rust that provides unified TCP and WebSocket support across Native, WASI Preview 2, and Browser environments.
 
@@ -23,7 +25,7 @@ A production-ready, cross-platform networking library for Rust that provides uni
 Add to your `Cargo.toml`:
 ```toml
 [dependencies]
-aloeclient = { path = "../aloeclient" }  # Or from crates.io when published
+ego_transport = ...
 
 # Platform-specific dependencies are handled automatically
 ```
@@ -32,9 +34,9 @@ aloeclient = { path = "../aloeclient" }  # Or from crates.io when published
 
 ### TCP Echo Server (Native)
 ```rust
-use aloeclient::platform::tcp_native::TcpListenerNative;
-use aloeclient::server::ServerBuilder;
-use aloeclient::transport::Transport;
+use ego_transport::platform::tcp_native::TcpListenerNative;
+use ego_transport::server::ServerBuilder;
+use ego_transport::transport::Transport;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -56,19 +58,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ### WebSocket Client (All Platforms)
 ```rust
-use aloeclient::transport::Transport;
+use ego_transport::transport::Transport;
 
 // Native
 #[cfg(not(target_arch = "wasm32"))]
-use aloeclient::platform::ws_native::WebSocketNative as WebSocket;
+use ego_transport::platform::ws_native::WebSocketNative as WebSocket;
 
 // WASI
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
-use aloeclient::platform::ws_wasi::WebSocketWasi as WebSocket;
+use ego_transport::platform::ws_wasi::WebSocketWasi as WebSocket;
 
 // Browser
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-use aloeclient::platform::ws_browser::WebSocketBrowser as WebSocket;
+use ego_transport::platform::ws_browser::WebSocketBrowser as WebSocket;
 
 async fn connect_example() -> Result<(), Box<dyn std::error::Error>> {
     let mut ws = WebSocket::connect("ws://127.0.0.1:9999").await?;
@@ -89,7 +91,7 @@ async fn connect_example() -> Result<(), Box<dyn std::error::Error>> {
 
 ### Transport Trait
 
-All networking in `aloeclient` uses the `Transport` trait:
+All networking in `ego_transport` uses the `Transport` trait:
 ```rust
 #[async_trait(?Send)]
 pub trait Transport {
@@ -116,7 +118,7 @@ The library automatically uses the best implementation for each platform:
 
 #### Native TCP Client
 ```rust
-use aloeclient::platform::tcp_native::TcpStreamNative;
+use ego_transport::platform::tcp_native::TcpStreamNative;
 
 let mut stream = TcpStreamNative::connect("127.0.0.1:9999").await?;
 stream.send(b"Hello").await?;
@@ -124,7 +126,7 @@ stream.send(b"Hello").await?;
 
 #### Native TCP Server
 ```rust
-use aloeclient::platform::tcp_native::TcpListenerNative;
+use ego_transport::platform::tcp_native::TcpListenerNative;
 
 let listener = TcpListenerNative::bind("127.0.0.1:9999")?;
 let transport = listener.accept().await?;
@@ -132,7 +134,7 @@ let transport = listener.accept().await?;
 
 #### WASI TCP Client
 ```rust
-use aloeclient::platform::tcp_wasi::TcpStreamWasi;
+use ego_transport::platform::tcp_wasi::TcpStreamWasi;
 
 let mut stream = TcpStreamWasi::connect("127.0.0.1:9999").await?;
 stream.send(b"Hello").await?;
@@ -140,7 +142,7 @@ stream.send(b"Hello").await?;
 
 #### WASI TCP Server
 ```rust
-use aloeclient::platform::tcp_wasi::TcpStreamWasi;
+use ego_transport::platform::tcp_wasi::TcpStreamWasi;
 
 let listener = TcpStreamWasi::bind("127.0.0.1:9999").await?;
 let transport = listener.accept().await?;
@@ -150,7 +152,7 @@ let transport = listener.accept().await?;
 
 #### Native WebSocket Client
 ```rust
-use aloeclient::platform::ws_native::WebSocketNative;
+use ego_transport::platform::ws_native::WebSocketNative;
 
 let mut ws = WebSocketNative::connect("ws://127.0.0.1:9999").await?;
 ws.send(b"Hello").await?;
@@ -161,7 +163,7 @@ let n = ws.recv(&mut buf).await?;
 
 #### Native WebSocket Server
 ```rust
-use aloeclient::platform::tcp_native::TcpListenerNative;
+use ego_transport::platform::tcp_native::TcpListenerNative;
 
 let listener = TcpListenerNative::bind("127.0.0.1:9999")?;
 
@@ -173,7 +175,7 @@ loop {
 
 #### WASI WebSocket Client
 ```rust
-use aloeclient::platform::ws_wasi::WebSocketWasi;
+use ego_transport::platform::ws_wasi::WebSocketWasi;
 
 let mut ws = WebSocketWasi::connect("ws://127.0.0.1:9999").await?;
 ws.send(b"Hello").await?;
@@ -184,8 +186,8 @@ let n = ws.recv(&mut buf).await?;
 
 #### WASI WebSocket Server
 ```rust
-use aloeclient::platform::tcp_wasi::TcpStreamWasi;
-use aloeclient::platform::ws_wasi::WebSocketWasi;
+use ego_transport::platform::tcp_wasi::TcpStreamWasi;
+use ego_transport::platform::ws_wasi::WebSocketWasi;
 
 let listener = TcpStreamWasi::bind("127.0.0.1:9999").await?;
 
@@ -198,7 +200,7 @@ loop {
 
 #### Browser WebSocket Client
 ```rust
-use aloeclient::platform::ws_browser::WebSocketBrowser;
+use ego_transport::platform::ws_browser::WebSocketBrowser;
 
 let mut ws = WebSocketBrowser::connect("ws://127.0.0.1:9999").await?;
 ws.send(b"Hello").await?;
@@ -211,7 +213,7 @@ let n = ws.recv(&mut buf).await?;
 
 The `ServerBuilder` provides platform-appropriate concurrency:
 ```rust
-use aloeclient::server::ServerBuilder;
+use ego_transport::server::ServerBuilder;
 
 // Native - Concurrent by default
 ServerBuilder::new(listener)
@@ -289,7 +291,7 @@ A production-ready, cross-platform networking library for Rust that provides uni
 Add to your `Cargo.toml`:
 ```toml
 [dependencies]
-aloeclient = { path = "../aloeclient" }  # Or from crates.io when published
+ego_transport = ...
 
 # Platform-specific dependencies are handled automatically
 ```
@@ -298,9 +300,9 @@ aloeclient = { path = "../aloeclient" }  # Or from crates.io when published
 
 ### TCP Echo Server (Native)
 ```rust
-use aloeclient::platform::tcp_native::TcpListenerNative;
-use aloeclient::platform::server::ServerBuilder;
-use aloeclient::transport::Transport;
+use ego_transport::platform::tcp_native::TcpListenerNative;
+use ego_transport::platform::server::ServerBuilder;
+use ego_transport::transport::Transport;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -325,8 +327,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 Serve TCP and WebSocket clients on the same port. The listener inspects the first bytes of each connection and routes accordingly — the handler receives a unified `Transport` and doesn't need to know which protocol the client used.
 
 ```rust
-use aloeclient::platform::server::{AutoDetectListener, ServerBuilder};
-use aloeclient::transport::Transport;
+use ego_transport::platform::server::{AutoDetectListener, ServerBuilder};
+use ego_transport::transport::Transport;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -361,19 +363,19 @@ ws.send(b"hello via WebSocket").await?;
 
 ### WebSocket Client (All Platforms)
 ```rust
-use aloeclient::transport::Transport;
+use ego_transport::transport::Transport;
 
 // Native
 #[cfg(not(target_arch = "wasm32"))]
-use aloeclient::platform::ws_native::WebSocketNative as WebSocket;
+use ego_transport::platform::ws_native::WebSocketNative as WebSocket;
 
 // WASI
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
-use aloeclient::platform::ws_wasi::WebSocketWasi as WebSocket;
+use ego_transport::platform::ws_wasi::WebSocketWasi as WebSocket;
 
 // Browser
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-use aloeclient::platform::ws_browser::WebSocketBrowser as WebSocket;
+use ego_transport::platform::ws_browser::WebSocketBrowser as WebSocket;
 
 async fn connect_example() -> Result<(), Box<dyn std::error::Error>> {
     let mut ws = WebSocket::connect("ws://127.0.0.1:9999").await?;
@@ -394,7 +396,7 @@ async fn connect_example() -> Result<(), Box<dyn std::error::Error>> {
 
 ### Transport Trait
 
-All networking in `aloeclient` uses the `Transport` trait:
+All networking in `ego_transport` uses the `Transport` trait:
 ```rust
 #[async_trait(?Send)]
 pub trait Transport {
@@ -421,7 +423,7 @@ The library automatically uses the best implementation for each platform:
 
 #### Native TCP Client
 ```rust
-use aloeclient::platform::tcp_native::TcpStreamNative;
+use ego_transport::platform::tcp_native::TcpStreamNative;
 
 let mut stream = TcpStreamNative::connect("127.0.0.1:9999").await?;
 stream.send(b"Hello").await?;
@@ -429,7 +431,7 @@ stream.send(b"Hello").await?;
 
 #### Native TCP Server
 ```rust
-use aloeclient::platform::tcp_native::TcpListenerNative;
+use ego_transport::platform::tcp_native::TcpListenerNative;
 
 let listener = TcpListenerNative::bind("127.0.0.1:9999")?;
 let transport = listener.accept().await?;
@@ -437,7 +439,7 @@ let transport = listener.accept().await?;
 
 #### WASI TCP Client
 ```rust
-use aloeclient::platform::tcp_wasi::TcpStreamWasi;
+use ego_transport::platform::tcp_wasi::TcpStreamWasi;
 
 let mut stream = TcpStreamWasi::connect("127.0.0.1:9999").await?;
 stream.send(b"Hello").await?;
@@ -445,7 +447,7 @@ stream.send(b"Hello").await?;
 
 #### WASI TCP Server
 ```rust
-use aloeclient::platform::tcp_wasi::TcpListenerWasi;
+use ego_transport::platform::tcp_wasi::TcpListenerWasi;
 
 let listener = TcpListenerWasi::bind("127.0.0.1:9999").await?;
 let transport = listener.accept().await?;
@@ -455,7 +457,7 @@ let transport = listener.accept().await?;
 
 #### Native WebSocket Client
 ```rust
-use aloeclient::platform::ws_native::WebSocketNative;
+use ego_transport::platform::ws_native::WebSocketNative;
 
 let mut ws = WebSocketNative::connect("ws://127.0.0.1:9999").await?;
 ws.send(b"Hello").await?;
@@ -466,7 +468,7 @@ let n = ws.recv(&mut buf).await?;
 
 #### Native WebSocket Server
 ```rust
-use aloeclient::platform::tcp_native::TcpListenerNative;
+use ego_transport::platform::tcp_native::TcpListenerNative;
 
 let listener = TcpListenerNative::bind("127.0.0.1:9999")?;
 
@@ -478,7 +480,7 @@ loop {
 
 #### WASI WebSocket Client
 ```rust
-use aloeclient::platform::ws_wasi::WebSocketWasi;
+use ego_transport::platform::ws_wasi::WebSocketWasi;
 
 let mut ws = WebSocketWasi::connect("ws://127.0.0.1:9999").await?;
 ws.send(b"Hello").await?;
@@ -489,8 +491,8 @@ let n = ws.recv(&mut buf).await?;
 
 #### WASI WebSocket Server
 ```rust
-use aloeclient::platform::tcp_wasi::TcpListenerWasi;
-use aloeclient::platform::ws_wasi::WebSocketWasi;
+use ego_transport::platform::tcp_wasi::TcpListenerWasi;
+use ego_transport::platform::ws_wasi::WebSocketWasi;
 
 let listener = TcpListenerWasi::bind("127.0.0.1:9999").await?;
 
@@ -503,7 +505,7 @@ loop {
 
 #### Browser WebSocket Client
 ```rust
-use aloeclient::platform::ws_browser::WebSocketBrowser;
+use ego_transport::platform::ws_browser::WebSocketBrowser;
 
 let mut ws = WebSocketBrowser::connect("ws://127.0.0.1:9999").await?;
 ws.send(b"Hello").await?;
@@ -522,8 +524,8 @@ Every incoming connection's first 4 bytes are examined before the handler runs. 
 
 #### Basic Usage
 ```rust
-use aloeclient::platform::server::{AutoDetectListener, ServerBuilder};
-use aloeclient::transport::Transport;
+use ego_transport::platform::server::{AutoDetectListener, ServerBuilder};
+use ego_transport::transport::Transport;
 
 let listener = AutoDetectListener::bind("127.0.0.1:9999").await?;
 
@@ -574,7 +576,7 @@ Use `AutoDetectListener` when your server needs to accept both TCP and WebSocket
 The `ServerBuilder` provides platform-appropriate concurrency and works with any listener type — `TcpListenerNative`, `TcpListenerWasi`, or `AutoDetectListener`:
 
 ```rust
-use aloeclient::platform::server::ServerBuilder;
+use ego_transport::platform::server::ServerBuilder;
 
 // Native — concurrent by default, spawns a handler task per connection
 ServerBuilder::new(listener)
@@ -851,12 +853,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Uses [tungstenite](https://github.com/snapview/tungstenite-rs) for WebSocket protocol
 - WASI support via [wasip2](https://crates.io/crates/wasip2)
 - Browser support via [wasm-bindgen](https://rustwasm.github.io/wasm-bindgen/)
-
-## 📞 Support
-
-- **Issues**: [GitHub Issues](https://github.com/yourusername/aloeclient/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/yourusername/aloeclient/discussions)
-- **Documentation**: [docs.rs/aloeclient](https://docs.rs/aloeclient)
 
 ## 🗺️ Roadmap
 

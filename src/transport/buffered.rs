@@ -52,17 +52,11 @@ impl Transport for BufferedTransport {
             filled = n;
         }
 
-        // If the buffer isn't full, read from the inner transport to coalesce.
-        //
-        // This keeps BufferedTransport transparent to the handler: on native,
-        // peek() is non-consuming so the first recv() returns all available bytes
-        // as one contiguous chunk. Without coalescing here, WASI would split the
-        // same data into two recv() results (prefix, then stream), which changes
-        // observable behavior for any handler that echoes per-recv.
-        //
-        // If the inner read fails but we already have prefix bytes, we return
-        // those — the error will surface on the caller's next recv().
-        if filled < buf.len() {
+        // If we had no prefix bytes to deliver, read from the inner transport.
+        // When prefix bytes were returned, deliver them immediately without
+        // blocking on the inner transport — the caller will get stream data
+        // on their next recv() call.
+        if filled == 0 {
             match self.inner.recv(&mut buf[filled..]).await {
                 Ok(n) => filled += n,
                 Err(e) => {

@@ -12,19 +12,29 @@
 //!
 //! `AutoDetectListener` accepts TCP connections and automatically detects whether
 //! each one is a raw TCP connection or a WebSocket upgrade request — returning the
-//! appropriate `Box<dyn Transport>` either way. It implements the `Listener` trait,
-//! so it works with `ServerBuilder` unchanged:
+//! appropriate `Box<dyn Transport>` either way.
+//!
+//! ## Embedded Signaling
+//!
+//! `AutoDetectListener` can optionally embed a `SignalingHub` that handles WebRTC
+//! signaling peers. When enabled, connections whose first message is `JOIN:...`
+//! are routed to the signaling hub (which manages rooms and relays SDP/ICE
+//! messages). Application connections pass through to `ServerBuilder` as normal.
 //!
 //! ```no_run
-//! use aloeclient::platform::server::{AutoDetectListener, ServerBuilder};
+//! use ego_transport::platform::server::{AutoDetectListener, ServerBuilder};
+//! use ego_transport::transport::signaling_hub::SignalingHub;
 //!
 //! async fn run() {
-//!     let listener = AutoDetectListener::bind("0.0.0.0:9990").await.unwrap();
+//!     let hub = SignalingHub::new();
+//!     let listener = AutoDetectListener::bind("0.0.0.0:9990").await.unwrap()
+//!         .with_signaling(hub);
 //!
 //!     ServerBuilder::new(listener)
 //!         .concurrent()
 //!         .run(|mut transport| async move {
-//!             // transport is TCP or WebSocket — handler is the same either way
+//!             // Only non-signaling connections reach this handler.
+//!             // Signaling peers are handled by the embedded hub.
 //!             let mut buf = [0u8; 1024];
 //!             while let Ok(n) = transport.recv(&mut buf).await {
 //!                 transport.send(&buf[..n]).await.ok();
@@ -35,7 +45,10 @@
 //! }
 //! ```
 //!
+//! For a signaling-only server (no application handler), the handler can
+//! be a no-op — all connections are signaling peers.
 
+use crate::transport::signaling_hub::SignalingHub;
 use crate::transport::{Transport, TransportError};
 use std::future::Future;
 
@@ -98,12 +111,6 @@ impl<L: Listener> ServerBuilder<L> {
     }
 
     /// Use sequential mode (handle one connection at a time)
-    ///
-    /// This is useful for:
-    /// - Testing
-    /// - Debugging
-    /// - Resource-constrained environments
-    /// - When connection order matters
     pub fn sequential(mut self) -> Self {
         self.mode = ServerMode::Sequential;
         self
@@ -112,7 +119,6 @@ impl<L: Listener> ServerBuilder<L> {
     /// Use concurrent mode (spawn a task per connection)
     ///
     /// Only available on native and threaded WASI builds.
-    /// Each connection is handled in its own tokio task.
     #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
     pub fn concurrent(mut self) -> Self {
         self.mode = ServerMode::Concurrent;
@@ -122,10 +128,8 @@ impl<L: Listener> ServerBuilder<L> {
     /// Run the server with the given connection handler
     ///
     /// The handler closure is called for each accepted connection.
-    /// Behavior depends on the mode:
-    ///
-    /// - **Sequential**: Handler is awaited before accepting next connection
-    /// - **Concurrent**: Handler is spawned and next connection accepted immediately
+    /// Connections routed to an embedded SignalingHub (if configured)
+    /// never reach this handler.
     pub async fn run<F, Fut>(self, handler: F) -> Result<(), TransportError>
     where
         F: Fn(Box<dyn Transport>) -> Fut + Clone + MaybeSend + 'static,
@@ -175,32 +179,14 @@ impl<L: Listener> ServerBuilder<L> {
 // =====================================================================
 // AutoDetectListener
 // =====================================================================
-//
-// A Listener that accepts TCP connections and sniffs the first bytes to
-// determine whether each connection is raw TCP or a WebSocket upgrade.
-//
-// Detection strategy differs by platform:
-//   - Native: std::net::TcpStream::peek() — non-consuming, so the TCP path
-//     has zero overhead (no buffering, no round-trip conversions).
-//   - WASI:   InputStream has no peek. We read 4 bytes (consuming) and route
-//             via prefix buffers: BufferedTransport for TCP, WasiSyncStream
-//             with_prefix for WebSocket (so tungstenite sees the full request).
-//
-// Both platforms loop internally on rejected connections (tcp_only / ws_only
-// guards), so ServerBuilder never sees a rejection as an error — it just
-// sees the next valid connection.
-// =====================================================================
 
 /// Number of bytes to inspect for protocol detection.
-/// WebSocket upgrade requests are HTTP, which always begins with a method name.
-/// "GET " (4 bytes) is sufficient to distinguish from raw TCP in practice.
 const DETECT_PREFIX_LEN: usize = 4;
 
 /// The byte sequence that identifies a WebSocket upgrade request.
-/// All HTTP/1.x requests begin with a method; WebSocket upgrades are always GET.
 const WS_HANDSHAKE_PREFIX: &[u8; DETECT_PREFIX_LEN] = b"GET ";
 
-// --- Platform-specific imports for AutoDetectListener ---
+// --- Platform-specific imports ---
 
 #[cfg(not(target_arch = "wasm32"))]
 use crate::platform::tcp_native::{TcpListenerNative, TcpStreamNative};
@@ -214,29 +200,40 @@ use crate::platform::ws_wasi::WebSocketWasi;
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
 use crate::transport::BufferedTransport;
 
-/// A listener that auto-detects TCP vs WebSocket on a single port.
+/// A listener that auto-detects TCP vs WebSocket on a single port,
+/// with optional embedded signaling for WebRTC peer connections.
 ///
-/// Implements `Listener`, so it works directly with `ServerBuilder` — including
-/// concurrent mode on native. The detection happens inside `accept()` before the
-/// transport is handed off, so it is invisible to the concurrency model.
+/// ### Protocol detection
+///
+/// Two-stage detection:
+/// 1. **Transport level**: TCP (`not "GET "`) vs WebSocket (`"GET "`)
+/// 2. **Application level**: Signaling (`"JOIN:"` first message) vs app data
 ///
 /// ### Protocol filtering
 ///
 /// By default both TCP and WebSocket are accepted. Use `.tcp_only()` or
-/// `.ws_only()` to restrict. Connections of a disallowed type are closed
-/// silently (with a log warning) and the listener loops back to accept the
-/// next connection — the restriction never surfaces as an error to `ServerBuilder`.
+/// `.ws_only()` to restrict.
+///
+/// ### Embedded signaling
+///
+/// Call `.with_signaling(hub)` to enable. Connections whose first message
+/// is a `JOIN:` signaling message are handled by the hub and never reach
+/// `ServerBuilder`'s handler.
 pub struct AutoDetectListener {
-    #[cfg(not(target_arch = "wasm32"))]
-    inner: TcpListenerNative,
-
     #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
     inner: TcpListenerWasi,
-
-    /// Accept raw TCP connections
-    allow_tcp: bool,
-    /// Accept WebSocket upgrade requests
+    #[cfg(not(target_arch = "wasm32"))]
+    inner: TcpListenerNative,
     allow_ws: bool,
+    allow_tcp: bool,
+    signaling: Option<SignalingHub>,
+    /// Detection tasks send classified transports here.
+    #[cfg(not(target_arch = "wasm32"))]
+    detect_tx: tokio::sync::mpsc::Sender<Result<Box<dyn Transport>, ()>>,
+    /// Receiver for completed detections. Uses tokio::sync::Mutex so
+    /// accept(&self) can recv() across await points without &mut self.
+    #[cfg(not(target_arch = "wasm32"))]
+    detect_rx: tokio::sync::Mutex<tokio::sync::mpsc::Receiver<Result<Box<dyn Transport>, ()>>>,
 }
 
 // ===== Native implementation =====
@@ -244,105 +241,19 @@ pub struct AutoDetectListener {
 #[cfg(not(target_arch = "wasm32"))]
 impl AutoDetectListener {
     /// Bind to an address, accepting both TCP and WebSocket by default.
-    ///
-    /// This is `async` for cross-platform compatibility — on native it returns
-    /// immediately; on WASI the bind itself is async.
     pub async fn bind(addr: &str) -> Result<Self, TransportError> {
         let inner = TcpListenerNative::bind(addr)?;
+        #[cfg(not(target_arch = "wasm32"))]
+        let (detect_tx, detect_rx) = tokio::sync::mpsc::channel(32);
         Ok(Self {
             inner,
-            allow_tcp: true,
             allow_ws: true,
-        })
-    }
-
-    /// Restrict to TCP connections only. WebSocket upgrades will be rejected
-    /// (connection closed, warning logged).
-    pub fn tcp_only(mut self) -> Self {
-        self.allow_ws = false;
-        self
-    }
-
-    /// Restrict to WebSocket connections only. Raw TCP connections will be
-    /// rejected (connection closed, warning logged).
-    pub fn ws_only(mut self) -> Self {
-        self.allow_tcp = false;
-        self
-    }
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-#[async_trait::async_trait]
-impl Listener for AutoDetectListener {
-    async fn accept(&self) -> Result<Box<dyn Transport>, TransportError> {
-        use std::io::ErrorKind;
-
-        loop {
-            // Accept a raw TCP connection via the shared primitive.
-            let stream = self.inner.accept_std().await?;
-
-            // --- Protocol detection via non-consuming peek ---
-            //
-            // std::net::TcpStream::peek() does not advance the read position.
-            // On WouldBlock (no data yet) we yield and retry — same pattern as
-            // recv() elsewhere in this crate.
-            let mut peek_buf = [0u8; DETECT_PREFIX_LEN];
-            let peeked = loop {
-                match stream.peek(&mut peek_buf) {
-                    Ok(n) => break n,
-                    Err(e) if e.kind() == ErrorKind::WouldBlock => {
-                        tokio::task::yield_now().await;
-                    }
-                    Err(e) => return Err(TransportError::Io(e)),
-                }
-            };
-
-            // EOF before any data — connection is already dead.
-            if peeked == 0 {
-                log::debug!("[AutoDetect] Connection closed during protocol detection");
-                continue; // stream dropped, accept next
-            }
-
-            let is_websocket = peeked >= DETECT_PREFIX_LEN
-                && &peek_buf[..DETECT_PREFIX_LEN] == WS_HANDSHAKE_PREFIX;
-
-            if is_websocket {
-                if !self.allow_ws {
-                    log::warn!(
-                        "[AutoDetect] Rejected WebSocket connection (WebSocket not enabled)"
-                    );
-                    continue; // stream dropped → connection closed
-                }
-                // Convert to tokio stream for the tungstenite upgrade.
-                // peek() was non-consuming so all bytes are still available.
-                let tokio_stream =
-                    tokio::net::TcpStream::from_std(stream).map_err(TransportError::Io)?;
-                let ws = WebSocketNative::accept(tokio_stream).await?;
-                return Ok(Box::new(ws));
-            } else {
-                if !self.allow_tcp {
-                    log::warn!("[AutoDetect] Rejected TCP connection (TCP not enabled)");
-                    continue; // stream dropped → connection closed
-                }
-                // Wrap directly as TCP — peek was non-consuming, all bytes
-                // remain available for the handler's first recv().
-                return Ok(Box::new(TcpStreamNative { inner: stream }));
-            }
-        }
-    }
-}
-
-// ===== WASI implementation =====
-
-#[cfg(all(target_arch = "wasm32", target_env = "p2"))]
-impl AutoDetectListener {
-    /// Bind to an address, accepting both TCP and WebSocket by default.
-    pub async fn bind(addr: &str) -> Result<Self, TransportError> {
-        let inner = TcpListenerWasi::bind(addr).await?;
-        Ok(Self {
-            inner,
             allow_tcp: true,
-            allow_ws: true,
+            signaling: None,
+            #[cfg(not(target_arch = "wasm32"))]
+            detect_tx,
+            #[cfg(not(target_arch = "wasm32"))]
+            detect_rx: tokio::sync::Mutex::new(detect_rx),
         })
     }
 
@@ -357,6 +268,213 @@ impl AutoDetectListener {
         self.allow_tcp = false;
         self
     }
+
+    /// Enable embedded signaling. Connections whose first message is `JOIN:`
+    /// are handled by the hub and never reach the application handler.
+    ///
+    /// The hub is shared (cloneable) — multiple listeners or servers can
+    /// share the same signaling rooms.
+    pub fn with_signaling(mut self, hub: SignalingHub) -> Self {
+        self.signaling = Some(hub);
+        self
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[async_trait::async_trait]
+impl Listener for AutoDetectListener {
+    async fn accept(&self) -> Result<Box<dyn Transport>, TransportError> {
+        let tx = self.detect_tx.clone();
+        let mut rx = self.detect_rx.lock().await;
+
+        loop {
+            tokio::select! {
+                // Accept new raw connections and spawn detection tasks
+                accept_result = self.inner.accept_std() => {
+                    let stream = accept_result?;
+                    let allow_ws = self.allow_ws;
+                    let allow_tcp = self.allow_tcp;
+                    let signaling = self.signaling.clone();
+                    let tx = tx.clone();
+
+                    tokio_spawn(async move {
+                        let result = detect_and_classify(
+                            stream, allow_ws, allow_tcp, signaling,
+                        ).await;
+                        let _ = tx.send(result).await;
+                    });
+                }
+
+                // Completed detection — return app transports, skip handled ones
+                Some(result) = rx.recv() => {
+                    match result {
+                        Ok(transport) => return Ok(transport),
+                        Err(()) => continue,
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Classify a raw TCP connection: detect protocol, handle signaling, return transport.
+///
+/// Returns `Ok(transport)` for app connections that should be returned to the caller.
+/// Returns `Err(())` for connections handled internally (signaling) or that failed.
+#[cfg(not(target_arch = "wasm32"))]
+async fn detect_and_classify(
+    stream: std::net::TcpStream,
+    allow_ws: bool,
+    allow_tcp: bool,
+    signaling: Option<SignalingHub>,
+) -> Result<Box<dyn Transport>, ()> {
+    use std::io::ErrorKind;
+
+    let mut peek_buf = [0u8; DETECT_PREFIX_LEN];
+    let peeked = loop {
+        match stream.peek(&mut peek_buf) {
+            Ok(n) => break n,
+            Err(e) if e.kind() == ErrorKind::WouldBlock => {
+                tokio::task::yield_now().await;
+            }
+            Err(e) => {
+                log::debug!("[AutoDetect] Peek error: {:?}", e);
+                return Err(());
+            }
+        }
+    };
+
+    if peeked == 0 {
+        return Err(());
+    }
+
+    let is_websocket = peeked >= DETECT_PREFIX_LEN
+        && &peek_buf[..DETECT_PREFIX_LEN] == WS_HANDSHAKE_PREFIX;
+
+    if is_websocket {
+        if !allow_ws {
+            return Err(());
+        }
+
+        let tokio_stream = match tokio::net::TcpStream::from_std(stream) {
+            Ok(s) => s,
+            Err(e) => {
+                log::warn!("[AutoDetect] Stream conversion failed: {:?}", e);
+                return Err(());
+            }
+        };
+        let mut ws = match WebSocketNative::accept(tokio_stream).await {
+            Ok(ws) => ws,
+            Err(e) => {
+                log::warn!("[AutoDetect] WebSocket handshake failed: {:?}", e);
+                return Err(());
+            }
+        };
+
+        if let Some(hub) = signaling {
+            let mut first_buf = [0u8; 4096];
+            match tokio::time::timeout(
+                std::time::Duration::from_secs(5),
+                ws.recv(&mut first_buf),
+            ).await {
+                Ok(Ok(n)) => {
+                    if SignalingHub::is_signaling_message(&first_buf[..n]) {
+                        log::info!("[AutoDetect] Routing WS to SignalingHub");
+                        let first_msg = first_buf[..n].to_vec();
+                        tokio_spawn(async move {
+                            let transport: Box<dyn Transport> = Box::new(ws);
+                            if let Err(e) = hub.handle_peer(transport, &first_msg).await {
+                                log::debug!("[SignalingHub] Peer handler ended: {:?}", e);
+                            }
+                        });
+                        return Err(()); // Handled internally
+                    } else {
+                        let prefix = first_buf[..n].to_vec();
+                        return Ok(Box::new(
+                            crate::transport::BufferedTransport::new(prefix, Box::new(ws)),
+                        ));
+                    }
+                }
+                Ok(Err(_)) => return Err(()),
+                Err(_) => return Ok(Box::new(ws)),
+            }
+        } else {
+            return Ok(Box::new(ws));
+        }
+    } else {
+        if !allow_tcp {
+            return Err(());
+        }
+
+        if let Some(hub) = signaling {
+            let mut sig_peek = [0u8; 5];
+            let sig_peeked = loop {
+                match stream.peek(&mut sig_peek) {
+                    Ok(n) => break n,
+                    Err(e) if e.kind() == ErrorKind::WouldBlock => {
+                        tokio::task::yield_now().await;
+                    }
+                    Err(_) => break 0,
+                }
+            };
+
+            if sig_peeked >= 5
+                && SignalingHub::is_signaling_message(&sig_peek[..sig_peeked])
+            {
+                log::info!("[AutoDetect] TCP signaling connection");
+                let mut tcp = TcpStreamNative { inner: stream };
+                let mut first_buf = [0u8; 4096];
+                match tcp.recv(&mut first_buf).await {
+                    Ok(n) => {
+                        let first_msg = first_buf[..n].to_vec();
+                        tokio_spawn(async move {
+                            let transport: Box<dyn Transport> = Box::new(tcp);
+                            if let Err(e) = hub.handle_peer(transport, &first_msg).await {
+                                log::debug!("[SignalingHub] Peer handler ended: {:?}", e);
+                            }
+                        });
+                        return Err(());
+                    }
+                    Err(_) => return Err(()),
+                }
+            }
+        }
+
+        return Ok(Box::new(TcpStreamNative { inner: stream }));
+    }
+}
+// ===== WASI implementation =====
+
+#[cfg(all(target_arch = "wasm32", target_env = "p2"))]
+impl AutoDetectListener {
+    /// Bind to an address, accepting both TCP and WebSocket by default.
+    pub async fn bind(addr: &str) -> Result<Self, TransportError> {
+        let inner = TcpListenerWasi::bind(addr).await?;
+        Ok(Self {
+            inner,
+            allow_tcp: true,
+            allow_ws: true,
+            signaling: None,
+        })
+    }
+
+    /// Restrict to TCP connections only.
+    pub fn tcp_only(mut self) -> Self {
+        self.allow_ws = false;
+        self
+    }
+
+    /// Restrict to WebSocket connections only.
+    pub fn ws_only(mut self) -> Self {
+        self.allow_tcp = false;
+        self
+    }
+
+    /// Enable embedded signaling.
+    pub fn with_signaling(mut self, hub: SignalingHub) -> Self {
+        self.signaling = Some(hub);
+        self
+    }
 }
 
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
@@ -364,56 +482,107 @@ impl AutoDetectListener {
 impl Listener for AutoDetectListener {
     async fn accept(&self) -> Result<Box<dyn Transport>, TransportError> {
         loop {
-            // Accept a TCP connection. On WASI we get a TcpStreamWasi directly.
             let mut stream = self.inner.accept().await?;
 
             // --- Protocol detection via consuming read + prefix replay ---
-            //
-            // WASI InputStream has no peek(). We read up to DETECT_PREFIX_LEN
-            // bytes (consuming them from the stream) and then replay them via
-            // prefix buffers so the handler or tungstenite handshake sees the
-            // complete data.
             let mut detect_buf = [0u8; DETECT_PREFIX_LEN];
             let mut read = 0;
             while read < DETECT_PREFIX_LEN {
                 match stream.recv(&mut detect_buf[read..]).await {
-                    Ok(0) => break, // EOF
+                    Ok(0) => break,
                     Ok(n) => read += n,
                     Err(TransportError::Closed) => break,
                     Err(e) => return Err(e),
                 }
             }
 
-            // EOF before any data — connection is already dead.
             if read == 0 {
-                log::debug!("[AutoDetect] Connection closed during protocol detection");
-                continue; // stream dropped, accept next
+                log::debug!("[AutoDetect] Connection closed during detection");
+                continue;
             }
 
             let is_websocket = read >= DETECT_PREFIX_LEN
                 && &detect_buf[..DETECT_PREFIX_LEN] == WS_HANDSHAKE_PREFIX;
 
-            // The bytes we consumed — must be replayed regardless of which path we take.
             let prefix = detect_buf[..read].to_vec();
 
             if is_websocket {
                 if !self.allow_ws {
-                    log::warn!(
-                        "[AutoDetect] Rejected WebSocket connection (WebSocket not enabled)"
-                    );
-                    continue; // stream dropped → connection closed
+                    log::warn!("[AutoDetect] Rejected WebSocket (not enabled)");
+                    continue;
                 }
-                // Replay prefix through WasiSyncStream so tungstenite sees
-                // the full HTTP upgrade request during handshake.
-                let ws = WebSocketWasi::accept_with_prefix(stream, prefix).await?;
-                return Ok(Box::new(ws));
+                let mut ws = WebSocketWasi::accept_with_prefix(stream, prefix).await?;
+
+                // Application-level signaling detection for WASI WebSocket
+                if let Some(hub) = &self.signaling {
+                    let mut first_buf = [0u8; 4096];
+                    match ws.recv(&mut first_buf).await {
+                        Ok(n) => {
+                            if SignalingHub::is_signaling_message(&first_buf[..n]) {
+                                log::info!("[AutoDetect] WASI: routing to SignalingHub");
+                                let transport: Box<dyn Transport> = Box::new(ws);
+                                // WASI is sequential — handle inline
+                                hub.handle_peer(transport, &first_buf[..n]).await.ok();
+                                continue;
+                            } else {
+                                // Not signaling — return with buffered prefix
+                                let msg_prefix = first_buf[..n].to_vec();
+                                return Ok(Box::new(BufferedTransport::new(
+                                    msg_prefix,
+                                    Box::new(ws),
+                                )));
+                            }
+                        }
+                        Err(_) => continue,
+                    }
+                } else {
+                    return Ok(Box::new(ws));
+                }
             } else {
                 if !self.allow_tcp {
-                    log::warn!("[AutoDetect] Rejected TCP connection (TCP not enabled)");
-                    continue; // stream dropped → connection closed
+                    log::warn!("[AutoDetect] Rejected TCP (not enabled)");
+                    continue;
                 }
-                // Wrap in BufferedTransport so the handler's first recv()
-                // delivers the detection bytes before reading from the stream.
+
+                // Check for signaling on TCP
+                if let Some(hub) = &self.signaling {
+                    // We already consumed `prefix` bytes. Check if they start
+                    // with "JOIN" (4 bytes of the 5-byte "JOIN:" prefix).
+                    if read >= 4 && &prefix[..4] == b"JOIN" {
+                        // Read one more byte to confirm the colon
+                        let mut colon = [0u8; 1];
+                        match stream.recv(&mut colon).await {
+                            Ok(1) if colon[0] == b':' => {
+                                // It's a JOIN message. Read the rest.
+                                let mut rest_buf = [0u8; 4096];
+                                let mut full_msg = prefix.clone();
+                                full_msg.push(b':');
+                                match stream.recv(&mut rest_buf).await {
+                                    Ok(n) => {
+                                        full_msg.extend_from_slice(&rest_buf[..n]);
+                                    }
+                                    Err(_) => {}
+                                }
+                                log::info!("[AutoDetect] WASI TCP: routing to SignalingHub");
+                                let transport: Box<dyn Transport> = Box::new(stream);
+                                // Handle inline (WASI sequential)
+                                hub.handle_peer(transport, &full_msg).await.ok();
+                                continue;
+                            }
+                            Ok(n) => {
+                                // Not a colon — reconstruct prefix and return
+                                let mut full_prefix = prefix;
+                                full_prefix.extend_from_slice(&colon[..n]);
+                                return Ok(Box::new(BufferedTransport::new(
+                                    full_prefix,
+                                    Box::new(stream),
+                                )));
+                            }
+                            Err(_) => continue,
+                        }
+                    }
+                }
+
                 return Ok(Box::new(BufferedTransport::new(prefix, Box::new(stream))));
             }
         }

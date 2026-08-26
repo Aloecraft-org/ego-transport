@@ -1,12 +1,14 @@
-[target.wasm32-wasip2]
-runner = [
-    "wasmtime", "run",
-    "-S", "inherit-network",
-    "--dir", ".::.",           # Map current directory
-    "--dir", "/tmp::/tmp",     # Map /tmp
-    "--env", "TMPDIR=/tmp",
-    "--"
-]
+
+
+# [target.wasm32-wasip2]
+# runner = [
+#     "wasmtime", "run",
+#     "-S", "inherit-network",
+#     "--dir", ".::.",           # Map current directory
+#     "--dir", "/tmp::/tmp",     # Map /tmp
+#     "--env", "TMPDIR=/tmp",
+#     "--"
+# ]
 
 
 [target.wasm32-unknown-unknown]

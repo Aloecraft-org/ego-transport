@@ -5,11 +5,12 @@
 // 2. Connection Timeout: Hardcoded loop limit kills idle connections.
 
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
-use aloeclient::platform::tcp_wasi::{TcpListenerWasi, TcpStreamWasi};
+use ego_transport::platform::tcp_wasi::{TcpListenerWasi, TcpStreamWasi};
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
-use aloeclient::transport::Transport;
-#[cfg(all(target_arch = "wasm32", target_env = "p2"))]
-use std::time::{Duration, Instant};
+use ego_transport::transport::Transport;
+
+use ego_platform::Instant;
+use std::time::Duration;
 
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
 fn main() {
@@ -27,16 +28,16 @@ fn main() {
 
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
 async fn run_test() {
-    aloeplatform::init();
+    ego_platform::init();
     log::info!("=== WASI Blocking Proof Test ===");
 
     // 1. Spawn a "Heartbeat" task to detect runtime freezing
-    aloeplatform::spawn(async {
+    ego_platform::spawn(async {
         let mut i = 0;
         loop {
             i += 1;
             log::info!("💓 Heartbeat tick #{}", i);
-            aloeplatform::sleep(Duration::from_millis(500)).await;
+            ego_platform::sleep(Duration::from_millis(500)).await;
         }
     });
 

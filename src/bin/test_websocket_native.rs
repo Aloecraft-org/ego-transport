@@ -2,38 +2,38 @@
 
 // Native implementation
 #[cfg(not(target_arch = "wasm32"))]
-use aloeclient::platform;
+use ego_transport::platform;
 #[cfg(not(target_arch = "wasm32"))]
-use aloeclient::platform::tcp_native::TcpListenerNative;
+use ego_transport::platform::tcp_native::TcpListenerNative;
 #[cfg(not(target_arch = "wasm32"))]
-use aloeclient::platform::ws_native::WebSocketNative;
+use ego_transport::platform::ws_native::WebSocketNative;
 #[cfg(not(target_arch = "wasm32"))]
-use aloeclient::transport::Transport;
+use ego_transport::transport::Transport;
 #[cfg(not(target_arch = "wasm32"))]
 use std::time::Duration;
 
 #[cfg(not(target_arch = "wasm32"))]
 #[tokio::main]
 async fn main() {
-    aloeplatform::init();
+    ego_platform::init();
     log::info!("=== Native WebSocket Test ===");
 
     let addr = "127.0.0.1:9996";
 
     // Spawn WebSocket server
     let server_addr = addr.to_string();
-    aloeplatform::spawn(async move {
+    ego_platform::spawn(async move {
         run_ws_server(&server_addr).await;
     });
 
     // Give server time to start
-    aloeplatform::sleep(Duration::from_millis(100)).await;
+    ego_platform::sleep(Duration::from_millis(100)).await;
 
     // Run WebSocket client
     run_ws_client(&format!("ws://{}", addr)).await;
 
     log::info!("=== Test Complete ===");
-    aloeplatform::sleep(Duration::from_secs(1)).await;
+    ego_platform::sleep(Duration::from_secs(1)).await;
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -47,7 +47,7 @@ async fn run_ws_server(addr: &str) {
             Ok(mut ws) => {
                 log::info!("[WS Server] Client connected");
 
-                aloeplatform::spawn(async move {
+                ego_platform::spawn(async move {
                     let mut buf = [0u8; 1024];
                     let mut msg_count = 0;
 
@@ -116,14 +116,14 @@ async fn run_ws_client(url: &str) {
                     }
                 }
 
-                aloeplatform::sleep(Duration::from_millis(500)).await;
+                ego_platform::sleep(Duration::from_millis(500)).await;
             }
 
             log::info!("[WS Client] ✓ Test complete!");
 
             log::info!("[WS Client] Closing connection gracefully");
             drop(ws); // Drop will close the connection
-            aloeplatform::sleep(Duration::from_millis(100)).await;
+            ego_platform::sleep(Duration::from_millis(100)).await;
         }
         Err(e) => {
             log::error!("[WS Client] ✓ Connection failed: {:?}", e);

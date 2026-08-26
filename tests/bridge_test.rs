@@ -3,7 +3,7 @@
 mod common;
 use common::{async_test, test};
 
-use aloeclient::transport::{Transport, TransportBridge};
+use ego_transport::transport::{Transport, TransportBridge};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 /// Mock transport for testing
@@ -29,7 +29,7 @@ impl MockTransport {
 )]
 #[cfg_attr(all(target_arch = "wasm32", target_os = "unknown"), async_trait::async_trait(?Send))]
 impl Transport for MockTransport {
-    async fn send(&mut self, data: &[u8]) -> Result<(), aloeclient::transport::TransportError> {
+    async fn send(&mut self, data: &[u8]) -> Result<(), ego_transport::transport::TransportError> {
         self.written.push(data.to_vec());
         Ok(())
     }
@@ -37,7 +37,7 @@ impl Transport for MockTransport {
     async fn recv(
         &mut self,
         buf: &mut [u8],
-    ) -> Result<usize, aloeclient::transport::TransportError> {
+    ) -> Result<usize, ego_transport::transport::TransportError> {
         if self.read_pos >= self.read_data.len() {
             return Ok(0); // EOF
         }

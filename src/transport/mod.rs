@@ -2,8 +2,11 @@ pub mod bridge;
 mod buffered;
 mod tcp;
 mod websocket;
+pub mod rtc_signaling;
+pub mod p2p;
+pub mod signaling_hub;
 pub use bridge::TransportBridge;
-
+pub use p2p::connect_p2p;
 #[derive(Debug)]
 pub enum TransportKind {
     Tcp,
@@ -13,25 +16,33 @@ pub enum TransportKind {
 #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 pub use buffered::BufferedTransport;
 
-#[derive(Debug)]
+use thiserror::Error;
+
+#[derive(Debug, Error)]
 pub enum TransportError {
     /// The transport type is not supported on this platform
+    #[error("Unsupported transport: {0}")]
     Unsupported(String),
 
     /// A normal I/O error (native TCP, file descriptors, etc.)
-    Io(std::io::Error),
+    #[error("I/O error: {0}")]
+    Io(#[from] std::io::Error),
 
     /// WASI Preview 2 socket or stream error
     #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
-    Wasi(wasip2::io::error::Error),
+    #[error("WASI error: {0}")]
+    Wasi(#[from] wasip2::io::error::Error),
 
     /// Browser WebSocket error (stringified because JS errors are not typed)
+    #[error("WebSocket error: {0}")]
     WebSocket(String),
 
     /// Connection closed cleanly by the remote side
+    #[error("Connection closed cleanly")]
     Closed,
 
     /// Protocol-level error (bad frame, handshake failure, etc.)
+    #[error("Protocol error: {0}")]
     Protocol(String),
 }
 

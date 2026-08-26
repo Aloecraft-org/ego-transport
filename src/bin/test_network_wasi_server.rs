@@ -1,13 +1,13 @@
 // bin/test_network_wasi_server.rs
-use aloeclient::platform;
-use aloeclient::transport::{Transport, TransportError};
+use ego_transport::platform;
+use ego_transport::transport::{Transport, TransportError};
 use std::time::Duration;
 
 #[cfg(not(target_arch = "wasm32"))]
-use aloeclient::platform::tcp_native::TcpStreamNative;
+use ego_transport::platform::tcp_native::TcpStreamNative;
 
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
-use aloeclient::platform::tcp_wasi::TcpStreamWasi;
+use ego_transport::platform::tcp_wasi::TcpStreamWasi;
 
 // Native: Run the client
 #[cfg(not(target_arch = "wasm32"))]
@@ -32,13 +32,13 @@ fn main() {
 
 #[cfg(not(target_arch = "wasm32"))]
 async fn run_native_client() {
-    aloeplatform::init();
+    ego_platform::init();
     log::info!("=== Native TCP Client for WASI Server Test ===");
 
     let addr = "127.0.0.1:9997";
 
     // Give WASI server time to start
-    aloeplatform::sleep(Duration::from_secs(1)).await;
+    ego_platform::sleep(Duration::from_secs(1)).await;
 
     log::info!("[Client] Connecting to WASI server at {}", addr);
 
@@ -76,7 +76,7 @@ async fn run_native_client() {
                     }
                 }
 
-                aloeplatform::sleep(Duration::from_millis(500)).await;
+                ego_platform::sleep(Duration::from_millis(500)).await;
             }
 
             log::info!("[Client] ✓ Test complete!");
@@ -87,12 +87,12 @@ async fn run_native_client() {
     }
 
     // Give logs time to flush
-    aloeplatform::sleep(Duration::from_secs(1)).await;
+    ego_platform::sleep(Duration::from_secs(1)).await;
 }
 
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
 async fn run_wasi_server() {
-    aloeplatform::init();
+    ego_platform::init();
     log::info!("=== WASI TCP Server Test ===");
 
     let addr = "127.0.0.1:9997";

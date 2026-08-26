@@ -5,11 +5,12 @@
 // 2. Prove recv() spins instantly (100 attempts take ~0ms).
 
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
-use aloeclient::platform::tcp_wasi::TcpListenerWasi;
+use ego_transport::platform::tcp_wasi::TcpListenerWasi;
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
-use aloeclient::transport::Transport;
-#[cfg(all(target_arch = "wasm32", target_env = "p2"))]
-use std::time::{Duration, Instant};
+use ego_transport::transport::Transport;
+
+use ego_platform::Instant;
+use std::time::Duration;
 
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
 fn main() {
@@ -25,13 +26,13 @@ fn main() {}
 
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
 async fn run_diagnostics() {
-    aloeplatform::init();
+    ego_platform::init();
     log::info!("=== WASI Timing Diagnostics ===");
 
     // 1. Start a Heartbeat Monitor
     // If accept() yields properly, this logs every 500ms.
     // If accept() blocks, this will SILENTLY PAUSE.
-    aloeplatform::spawn(async {
+    ego_platform::spawn(async {
         let start = Instant::now();
         let mut tick = 0;
         loop {
@@ -41,7 +42,7 @@ async fn run_diagnostics() {
                 tick,
                 start.elapsed().as_secs_f32()
             );
-            aloeplatform::sleep(Duration::from_millis(500)).await;
+            ego_platform::sleep(Duration::from_millis(500)).await;
         }
     });
 
@@ -99,5 +100,5 @@ async fn run_diagnostics() {
     }
 
     // Keep alive to see final heartbeats
-    aloeplatform::sleep(Duration::from_secs(2)).await;
+    ego_platform::sleep(Duration::from_secs(2)).await;
 }

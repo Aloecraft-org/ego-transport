@@ -15,11 +15,12 @@
 //   accept() returns.
 
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
-use aloeclient::platform::tcp_wasi::{TcpListenerWasi, TcpStreamWasi};
+use ego_transport::platform::tcp_wasi::{TcpListenerWasi, TcpStreamWasi};
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
-use aloeclient::transport::Transport;
-#[cfg(all(target_arch = "wasm32", target_env = "p2"))]
-use std::time::{Duration, Instant};
+use ego_transport::transport::Transport;
+
+use ego_platform::Instant;
+use std::time::Duration;
 
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
 fn main() {
@@ -37,7 +38,7 @@ fn main() {
 
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
 async fn run_deadlock_test() {
-    aloeplatform::init();
+    ego_platform::init();
     log::info!("=== WASI Deadlock Test ===");
 
     let addr = "127.0.0.1:9990";
@@ -45,16 +46,16 @@ async fn run_deadlock_test() {
 
     // 1. Spawn the "Rescue" Client
     // If the runtime works, this will wake up in 1s and unblock the server.
-    aloeplatform::spawn(async move {
+    ego_platform::spawn(async move {
         log::info!("[Client] Scheduled. Sleeping 1s...");
-        aloeplatform::sleep(Duration::from_secs(1)).await;
+        ego_platform::sleep(Duration::from_secs(1)).await;
 
         log::info!("[Client] Waking up! Connecting...");
         match TcpStreamWasi::connect(addr).await {
             Ok(mut stream) => {
                 log::info!("[Client] Connected! Sending data in 2s...");
                 // Wait 2s to test the "100 attempts" timeout bug too
-                aloeplatform::sleep(Duration::from_secs(2)).await;
+                ego_platform::sleep(Duration::from_secs(2)).await;
                 let _ = stream.send(b"Hello").await;
             }
             Err(e) => log::error!("[Client] Connection failed: {:?}", e),
@@ -62,12 +63,12 @@ async fn run_deadlock_test() {
     });
 
     // 2. Spawn Heartbeat (Visual Proof of Liveness)
-    aloeplatform::spawn(async {
+    ego_platform::spawn(async {
         let mut i = 0;
         loop {
             i += 1;
             log::info!("💓 Tick #{}", i);
-            aloeplatform::sleep(Duration::from_millis(200)).await;
+            ego_platform::sleep(Duration::from_millis(200)).await;
         }
     });
 
