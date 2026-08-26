@@ -13,13 +13,12 @@
 //   5. Check console (F12) for output — both tabs should exchange messages
 
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-use ego_transport::platform;
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 use ego_transport::platform::rtc_browser::RtcBrowser;
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-use ego_transport::transport::rtc_signaling::IceServerConfig;
-#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 use ego_transport::transport::Transport;
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+use ego_transport::transport::rtc_signaling::IceServerConfig;
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 use wasm_bindgen::prelude::*;
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]

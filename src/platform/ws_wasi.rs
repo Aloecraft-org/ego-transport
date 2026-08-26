@@ -1,10 +1,9 @@
-use crate::transport::{Transport, TransportError};
-use std::time::Duration;
-
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
 use crate::platform::tcp_wasi::TcpStreamWasi;
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
 use crate::platform::wasi_sync_adapter::WasiSyncStream;
+#[cfg(all(target_arch = "wasm32", target_env = "p2"))]
+use crate::transport::{Transport, TransportError};
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
 use tungstenite::{
     accept, client,

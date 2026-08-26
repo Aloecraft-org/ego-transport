@@ -1,9 +1,11 @@
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 use crate::transport::{Transport, TransportError};
-use std::cell::RefCell;
-use std::rc::Rc;
-
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 use js_sys::Uint8Array;
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+use std::cell::RefCell;
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+use std::rc::Rc;
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 use wasm_bindgen::JsCast;
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
@@ -12,7 +14,7 @@ use wasm_bindgen::prelude::*;
 use web_sys::{BinaryType, CloseEvent, ErrorEvent, MessageEvent, WebSocket};
 
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
+use tokio::sync::mpsc::{UnboundedReceiver, unbounded_channel};
 
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 pub struct WebSocketBrowser {

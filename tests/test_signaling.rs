@@ -15,17 +15,23 @@
 
 mod common;
 
+#[cfg(not(target_arch = "wasm32"))]
 use common::test_harness;
 
+#[cfg(not(target_arch = "wasm32"))]
 const SIGNALING_HUB_ADDR: &str = "127.0.0.1:19986";
 
 /// Helper: connect one peer, spawn its actor, give it time to send JOIN,
 /// then connect the next peer and spawn it. Collects results.
 #[cfg(not(target_arch = "wasm32"))]
-async fn run_hub_signaling_test(addr: &str, protocol: &str, room: &str) -> Vec<common::test_actor::SignalingTestEvent> {
+async fn run_hub_signaling_test(
+    addr: &str,
+    protocol: &str,
+    room: &str,
+) -> Vec<common::test_actor::SignalingTestEvent> {
     use crate::common::test_actor::{SignalingTestActor, SignalingTestEvent};
-    use ego_proc::actor::Orchestrator;
     use ego_proc::OrchestrationStrategy;
+    use ego_proc::actor::Orchestrator;
 
     let mut orch: Orchestrator<SignalingTestActor> =
         Orchestrator::new(OrchestrationStrategy::oneshot());
@@ -36,9 +42,11 @@ async fn run_hub_signaling_test(addr: &str, protocol: &str, room: &str) -> Vec<c
     };
 
     // Connect both peers — AutoDetect now handles detection concurrently
-    let transport_a = ego_transport::transport::connect(&url).await
+    let transport_a = ego_transport::transport::connect(&url)
+        .await
         .expect("Peer A: connect failed");
-    let transport_b = ego_transport::transport::connect(&url).await
+    let transport_b = ego_transport::transport::connect(&url)
+        .await
         .expect("Peer B: connect failed");
 
     orch.spawn(SignalingTestActor::new_hub_mode(room, transport_a));
@@ -52,10 +60,13 @@ async fn run_hub_signaling_test(addr: &str, protocol: &str, room: &str) -> Vec<c
             while let Some((_id, event)) = orch.recv_output() {
                 results.push(event);
             }
-            if results.len() >= 2 { return; }
+            if results.len() >= 2 {
+                return;
+            }
             ego_platform::sleep(std::time::Duration::from_millis(50)).await;
         }
-    }).await;
+    })
+    .await;
 
     results
 }
@@ -63,7 +74,7 @@ async fn run_hub_signaling_test(addr: &str, protocol: &str, room: &str) -> Vec<c
 #[cfg(not(target_arch = "wasm32"))]
 #[tokio::test]
 async fn test_signaling_through_hub_websocket() {
-    use crate::common::test_actor::{SignalingTestEvent, SignalingRole};
+    use crate::common::test_actor::{SignalingRole, SignalingTestEvent};
 
     ego_platform::init();
 
@@ -72,17 +83,40 @@ async fn test_signaling_through_hub_websocket() {
 
     let results = run_hub_signaling_test(SIGNALING_HUB_ADDR, "ws", "hub-ws-room").await;
 
-    assert_eq!(results.len(), 2, "Expected 2 completion events, got {}", results.len());
+    assert_eq!(
+        results.len(),
+        2,
+        "Expected 2 completion events, got {}",
+        results.len()
+    );
     for event in &results {
         test_harness::assert_signaling_success(&Some(event.clone()), "hub WS peer");
     }
 
-    let offerers = results.iter().filter(|e| matches!(e,
-        SignalingTestEvent::Complete { role: SignalingRole::Offerer, .. }
-    )).count();
-    let answerers = results.iter().filter(|e| matches!(e,
-        SignalingTestEvent::Complete { role: SignalingRole::Answerer, .. }
-    )).count();
+    let offerers = results
+        .iter()
+        .filter(|e| {
+            matches!(
+                e,
+                SignalingTestEvent::Complete {
+                    role: SignalingRole::Offerer,
+                    ..
+                }
+            )
+        })
+        .count();
+    let answerers = results
+        .iter()
+        .filter(|e| {
+            matches!(
+                e,
+                SignalingTestEvent::Complete {
+                    role: SignalingRole::Answerer,
+                    ..
+                }
+            )
+        })
+        .count();
     assert_eq!(offerers, 1, "Expected 1 offerer");
     assert_eq!(answerers, 1, "Expected 1 answerer");
 }
@@ -98,7 +132,12 @@ async fn test_signaling_through_hub_tcp() {
 
     let results = run_hub_signaling_test(addr, "tcp", "hub-tcp-room").await;
 
-    assert_eq!(results.len(), 2, "Expected 2 completion events, got {}", results.len());
+    assert_eq!(
+        results.len(),
+        2,
+        "Expected 2 completion events, got {}",
+        results.len()
+    );
     for event in &results {
         test_harness::assert_signaling_success(&Some(event.clone()), "hub TCP peer");
     }

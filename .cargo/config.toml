@@ -1,21 +1,18 @@
-
-
-# [target.wasm32-wasip2]
-# runner = [
-#     "wasmtime", "run",
-#     "-S", "inherit-network",
-#     "--dir", ".::.",           # Map current directory
-#     "--dir", "/tmp::/tmp",     # Map /tmp
-#     "--env", "TMPDIR=/tmp",
-#     "--"
-# ]
-
-
-[target.wasm32-unknown-unknown]
-runner = "wasm-bindgen-test-runner"
-
+[target.wasm32-wasip2]
+# Without a runner cargo tries to exec the .wasm directly and gets EACCES.
+runner = [
+    "wasmtime", "run",
+    "-S", "inherit-network",
+    "--dir", ".::.",           # Map current directory
+    "--dir", "/tmp::/tmp",     # Map /tmp
+    "--env", "TMPDIR=/tmp",
+    "--"
+]
 # FIXME: wasip2 is still considered unstable. Get rid of this as soon as there's an upgrade
 rustflags = [
     "-C", "target-feature=+bulk-memory,+mutable-globals",
     "--cfg", "wasi_ext"
 ]
+
+[target.wasm32-unknown-unknown]
+runner = "wasm-bindgen-test-runner"

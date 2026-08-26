@@ -2,104 +2,51 @@
 name = "ego_transport"
 version = "0.1.2"
 edition = "2024"
+rust-version = "1.88"
+description = "Cross-platform transport layer (TCP, WebSocket, WebRTC) for native, WASI P2, and browser targets"
+repository = "https://github.com/Aloecraft-org/ego-transport"
 
 [lib]
 name = "ego_transport"
 path = "src/lib.rs"
 
-[[bin]]
-name = "test_rtc_browser"
-path = "src/bin/test_rtc_browser.rs"
-
-[[bin]]
-name = "signaling_server"
-path = "src/bin/signaling_server.rs"
-
-[[bin]]
-name = "test_signaling"
-path = "src/bin/test_signaling.rs"
-
-[[bin]]
-name = "test_p2p"
-path = "src/bin/test_p2p.rs"
-
-[[bin]]
-name = "test_p2p_native_peer"
-path = "src/bin/test_p2p_native_peer.rs"
-
-[[bin]]
-name = "test_network_wasi_client"
-path = "src/bin/test_network_wasi_client.rs"
-
-[[bin]]
-name = "test_network_wasi_server"
-path = "src/bin/test_network_wasi_server.rs"
-
-[[bin]]
-name = "test_server"
-path = "src/bin/test_server.rs"
-
-[[bin]]
-name = "test_websocket_native"
-path = "src/bin/test_websocket_native.rs"
-
-[[bin]]
-name = "test_websocket_wasi_client"
-path = "src/bin/test_websocket_wasi_client.rs"
-
-[[bin]]
-name = "test_websocket_browser"
-path = "src/bin/test_websocket_browser.rs"
-
-[[bin]]
-name = "test_auto_detect_native"
-path = "src/bin/test_auto_detect_native.rs"
-
-[[bin]]
-name = "test_auto_detect_wasi_server"
-path = "src/bin/test_auto_detect_wasi_server.rs"
-
-[[bin]]
-name = "test_deadlock"
-path = "src/bin/test_deadlock.rs"
+# Test/demo binaries in src/bin/ are picked up by cargo's auto-discovery.
 
 [dependencies]
 ego_platform = { git = "https://github.com/Aloecraft-org/ego-platform" }
-async-trait = "0.1.89"
-# === Core (all platforms) ===
+async-trait = "0.1"
 log = "0.4"
 futures = "0.3"
 thiserror = "2"
-anyhow = "1"
 tokio = { version = "1", default-features = false }
 
-# === WASM Common (Both CLI and Browser) ===
+# === WASM common (WASI and browser) ===
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 tokio = { version = "1", features = ["sync", "macros", "io-util", "rt", "time"] }
 
 # === Native only ===
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { version = "1", features = ["full"] }
-tokio-tungstenite = "0.24"  # Add this
+tokio-tungstenite = "0.24"
 tungstenite = { version = "0.24", default-features = false }
 env_logger = "0.11"
-webrtc = "0.17.1"
+webrtc = "0.17"
 bytes = "1"
 
 # === WASI P2 only ===
 [target.'cfg(all(target_arch = "wasm32", target_env = "p2"))'.dependencies]
-tokio = { version = "1", features = ["sync", "macros", "io-util", "rt", "time"] }
-wasi-preview2-prototype = "0.0.3"
-wasip2 = "1.0.2"
+wasip2 = "1.0"
 tungstenite = { version = "0.24", features = ["handshake"] }
-# Note: May need to verify tungstenite WASI P2 compatibility
 
 # === Browser only ===
 [target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
+# Pinned: the bindgen ABI is unstable and must match the wasm-bindgen-cli /
+# wasm-bindgen-test-runner version installed in the devcontainer and CI
+# (ego_platform pins the same version).
 wasm-bindgen = "=0.2.114"
 wasm-bindgen-futures = "0.4"
 console_error_panic_hook = "0.1"
-tokio = { version = "1", features = ["sync", "macros", "io-util", "rt", "time"] }
+js-sys = "0.3"
 web-sys = { version = "0.3", features = [
     "WebSocket",
     "MessageEvent",
@@ -117,15 +64,12 @@ web-sys = { version = "0.3", features = [
     "RtcIceCandidate",
     "RtcIceCandidateInit",
     "RtcPeerConnectionIceEvent",
-
 ] }
-gloo-timers = { version = "0.3", features = ["futures"] }
-js-sys = "0.3"
-console_log = "1"
 
-# Test dependencies
 [dev-dependencies]
 ego_proc = { git = "https://github.com/Aloecraft-org/ego-proc" }
-uuid = "1.20.0"
-wasm-bindgen-test = "0.3.12"
-tokio-test = "0.4"
+anyhow = "1"
+uuid = "1"
+
+[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dev-dependencies]
+wasm-bindgen-test = "0.3"

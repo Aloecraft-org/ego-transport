@@ -48,10 +48,10 @@
 //!
 //! ```no_run
 //! # async fn run() -> Result<(), ego_transport::transport::TransportError> {
-//! 
+//!
 //! use ego_transport::platform::server::{ServerBuilder, AutoDetectListener};
 //! use ego_transport::transport::signaling_hub::SignalingHub;
-//! 
+//!
 //! let hub = SignalingHub::new();
 //! let listener = AutoDetectListener::bind("0.0.0.0:9995").await?
 //!     .with_signaling(hub);
@@ -61,7 +61,7 @@
 //!     .concurrent()
 //!     .run(|_| async { /* never reached for signaling-only server */ })
 //!     .await?;
-//! 
+//!
 //! # Ok(())
 //! # }
 //! ```
@@ -103,6 +103,12 @@ pub struct SignalingHub {
     rooms: Arc<Mutex<HashMap<String, Room>>>,
 }
 
+impl Default for SignalingHub {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SignalingHub {
     /// Create a new empty hub.
     pub fn new() -> Self {
@@ -139,9 +145,8 @@ impl SignalingHub {
     ) -> Result<(), TransportError> {
         // Parse the JOIN message (already validated by is_signaling_message)
         let text = String::from_utf8_lossy(first_message);
-        let join_msg = SignalingMessage::deserialize(&text).ok_or_else(|| {
-            TransportError::Protocol(format!("Invalid JOIN message: {}", text))
-        })?;
+        let join_msg = SignalingMessage::deserialize(&text)
+            .ok_or_else(|| TransportError::Protocol(format!("Invalid JOIN message: {}", text)))?;
 
         if join_msg.kind != SignalingKind::Join {
             let err = SignalingMessage::error("", "First message must be JOIN");
@@ -184,7 +189,10 @@ impl SignalingHub {
                 wire_b.push('\n');
                 transport.send(wire_b.as_bytes()).await?;
 
-                log::info!("[SignalingHub] Room '{}' ready — two peers matched", room_name);
+                log::info!(
+                    "[SignalingHub] Room '{}' ready — two peers matched",
+                    room_name
+                );
             } else {
                 // First peer (offerer)
                 map.insert(
@@ -203,8 +211,9 @@ impl SignalingHub {
         }
 
         // Relay loop
-        let relay_result =
-            self.relay_loop(&mut transport, &mut my_rx, &room_name, role).await;
+        let relay_result = self
+            .relay_loop(&mut transport, &mut my_rx, &room_name, role)
+            .await;
 
         // Cleanup
         self.cleanup_peer(&room_name, role).await;
@@ -241,12 +250,11 @@ impl SignalingHub {
                             PeerRole::Offerer => room.peer_b_tx.as_ref(),
                             PeerRole::Answerer => Some(&room.peer_a_tx),
                         };
-                        if let Some(tx) = other_tx {
-                            if tx.send(text).is_err() {
+                        if let Some(tx) = other_tx
+                            && tx.send(text).is_err() {
                                 log::debug!("[SignalingHub] Other peer disconnected");
                                 return Ok(());
                             }
-                        }
                     }
                 }
 
@@ -291,10 +299,7 @@ impl SignalingHub {
 
             // Remove room if both peers are gone
             let a_closed = room.peer_a_tx.is_closed();
-            let b_closed = room
-                .peer_b_tx
-                .as_ref()
-                .map_or(true, |tx| tx.is_closed());
+            let b_closed = room.peer_b_tx.as_ref().is_none_or(|tx| tx.is_closed());
 
             if a_closed && b_closed {
                 map.remove(room_name);

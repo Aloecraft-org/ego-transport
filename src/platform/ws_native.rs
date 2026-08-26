@@ -1,6 +1,5 @@
+#[cfg(not(target_arch = "wasm32"))]
 use crate::transport::{Transport, TransportError};
-use std::time::Duration;
-
 #[cfg(not(target_arch = "wasm32"))]
 use tokio_tungstenite::{
     MaybeTlsStream, WebSocketStream, accept_async, connect_async, tungstenite::protocol::Message,
@@ -60,7 +59,7 @@ impl WebSocketNative {
 
         Ok(Self {
             stream: ws_stream,
-            peer_addr: peer_addr,
+            peer_addr,
         })
     }
 }

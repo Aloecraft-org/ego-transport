@@ -2,8 +2,6 @@
 
 // Browser implementation
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-use ego_transport::platform;
-#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 use ego_transport::platform::ws_browser::WebSocketBrowser;
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 use ego_transport::transport::Transport;
