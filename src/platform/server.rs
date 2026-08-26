@@ -77,6 +77,40 @@ pub trait Listener {
     async fn accept(&self) -> Result<Box<dyn Transport>, TransportError>;
 }
 
+/// One accepted connection with everything the consumer needs to route it:
+/// the stream itself, whatever identity the scheme attested to, and the
+/// remote address when the platform can report one.
+pub struct Accepted {
+    pub transport: Box<dyn Transport>,
+    pub identity: crate::identity::PeerIdentity,
+    pub remote_addr: Option<String>,
+}
+
+/// Listeners that surface identity and remote address with each accept.
+///
+/// Schemes without a handshake identity (tcp, plain ws) report
+/// [`PeerIdentity::Anonymous`](crate::identity::PeerIdentity::Anonymous);
+/// authenticated schemes report the peer's proven key. Identity is reported
+/// verbatim — mapping it to permissions is the consumer's job.
+#[async_trait::async_trait]
+pub trait IdentifiedListener {
+    async fn accept_identified(&self) -> Result<Accepted, TransportError>;
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[async_trait::async_trait]
+impl IdentifiedListener for crate::platform::tcp_native::TcpListenerNative {
+    async fn accept_identified(&self) -> Result<Accepted, TransportError> {
+        let stream = self.accept_std().await?;
+        let remote_addr = stream.peer_addr().ok().map(|a| a.to_string());
+        Ok(Accepted {
+            transport: Box::new(crate::platform::tcp_native::TcpStreamNative { inner: stream }),
+            identity: crate::identity::PeerIdentity::Anonymous,
+            remote_addr,
+        })
+    }
+}
+
 /// Builder for creating a server with platform-appropriate concurrency
 pub struct ServerBuilder<L> {
     listener: L,
@@ -348,8 +382,8 @@ async fn detect_and_classify(
         return Err(());
     }
 
-    let is_websocket = peeked >= DETECT_PREFIX_LEN
-        && &peek_buf[..DETECT_PREFIX_LEN] == WS_HANDSHAKE_PREFIX;
+    let is_websocket =
+        peeked >= DETECT_PREFIX_LEN && &peek_buf[..DETECT_PREFIX_LEN] == WS_HANDSHAKE_PREFIX;
 
     if is_websocket {
         if !allow_ws {
@@ -373,10 +407,9 @@ async fn detect_and_classify(
 
         if let Some(hub) = signaling {
             let mut first_buf = [0u8; 4096];
-            match tokio::time::timeout(
-                std::time::Duration::from_secs(5),
-                ws.recv(&mut first_buf),
-            ).await {
+            match tokio::time::timeout(std::time::Duration::from_secs(5), ws.recv(&mut first_buf))
+                .await
+            {
                 Ok(Ok(n)) => {
                     if SignalingHub::is_signaling_message(&first_buf[..n]) {
                         log::info!("[AutoDetect] Routing WS to SignalingHub");
@@ -390,9 +423,10 @@ async fn detect_and_classify(
                         return Err(()); // Handled internally
                     } else {
                         let prefix = first_buf[..n].to_vec();
-                        return Ok(Box::new(
-                            crate::transport::BufferedTransport::new(prefix, Box::new(ws)),
-                        ));
+                        return Ok(Box::new(crate::transport::BufferedTransport::new(
+                            prefix,
+                            Box::new(ws),
+                        )));
                     }
                 }
                 Ok(Err(_)) => return Err(()),
@@ -418,9 +452,7 @@ async fn detect_and_classify(
                 }
             };
 
-            if sig_peeked >= 5
-                && SignalingHub::is_signaling_message(&sig_peek[..sig_peeked])
-            {
+            if sig_peeked >= 5 && SignalingHub::is_signaling_message(&sig_peek[..sig_peeked]) {
                 log::info!("[AutoDetect] TCP signaling connection");
                 let mut tcp = TcpStreamNative { inner: stream };
                 let mut first_buf = [0u8; 4096];

@@ -85,6 +85,8 @@ tungstenite = { version = "0.24", default-features = false }
 env_logger = "0.11"
 webrtc = "0.17.1"
 bytes = "1"
+russh = "0.63"
+rand = { version = "0.10", features = ["thread_rng"] }
 
 # === WASI P2 only ===
 [target.'cfg(all(target_arch = "wasm32", target_env = "p2"))'.dependencies]

@@ -1,10 +1,10 @@
 pub mod bridge;
 mod buffered;
+pub mod p2p;
+pub mod rtc_signaling;
+pub mod signaling_hub;
 mod tcp;
 mod websocket;
-pub mod rtc_signaling;
-pub mod p2p;
-pub mod signaling_hub;
 pub use bridge::TransportBridge;
 pub use p2p::connect_p2p;
 #[derive(Debug)]
@@ -44,6 +44,36 @@ pub enum TransportError {
     /// Protocol-level error (bad frame, handshake failure, etc.)
     #[error("Protocol error: {0}")]
     Protocol(String),
+
+    /// The scheme exists but is not available for this operation on this
+    /// platform. This is the *named, typed* refusal surfaced at parse, dial,
+    /// or bind time — never a stub that half-works later.
+    #[error("scheme '{scheme}' cannot {operation} on {platform}: {reason}")]
+    SchemeUnavailable {
+        scheme: &'static str,
+        platform: &'static str,
+        operation: &'static str,
+        reason: &'static str,
+    },
+
+    /// The scheme is available but cannot be used from a bare address; it
+    /// needs scheme-specific configuration (credentials, signaling, ...).
+    #[error("scheme '{scheme}' needs configuration: {detail}")]
+    SchemeNeedsConfig {
+        scheme: &'static str,
+        detail: &'static str,
+    },
+
+    /// A frame exceeded the configured maximum size (on send, or announced
+    /// by a received header). Oversized frames are refused, never buffered.
+    #[error("frame of {len} bytes exceeds maximum {max}")]
+    FrameTooLarge { len: usize, max: usize },
+
+    /// SSH-specific failure (authentication, host key verification, channel
+    /// lifecycle), surfaced with its own typed detail.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[error(transparent)]
+    Ssh(#[from] crate::platform::ssh_native::SshError),
 }
 
 // For native and WASI: Use async_trait with Send
@@ -66,6 +96,30 @@ use async_trait::async_trait;
 pub trait Transport {
     async fn send(&mut self, data: &[u8]) -> Result<(), TransportError>;
     async fn recv(&mut self, buf: &mut [u8]) -> Result<usize, TransportError>;
+}
+
+// Boxed transports delegate, so helpers like FramedTransport work over
+// `Box<dyn Transport>` as well as concrete types.
+#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+#[async_trait]
+impl Transport for Box<dyn Transport> {
+    async fn send(&mut self, data: &[u8]) -> Result<(), TransportError> {
+        (**self).send(data).await
+    }
+    async fn recv(&mut self, buf: &mut [u8]) -> Result<usize, TransportError> {
+        (**self).recv(buf).await
+    }
+}
+
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+#[async_trait(?Send)]
+impl Transport for Box<dyn Transport> {
+    async fn send(&mut self, data: &[u8]) -> Result<(), TransportError> {
+        (**self).send(data).await
+    }
+    async fn recv(&mut self, buf: &mut [u8]) -> Result<usize, TransportError> {
+        (**self).recv(buf).await
+    }
 }
 
 /// Platform-specific transport creation
