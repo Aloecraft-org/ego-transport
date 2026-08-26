@@ -20,15 +20,15 @@ use ego_transport::platform::tcp_native::TcpStreamNative;
 #[cfg(not(target_arch = "wasm32"))]
 use ego_transport::platform::ws_native::WebSocketNative;
 #[cfg(not(target_arch = "wasm32"))]
+use ego_transport::transport::Transport;
+#[cfg(not(target_arch = "wasm32"))]
 use ego_transport::transport::rtc_signaling::*;
 #[cfg(not(target_arch = "wasm32"))]
 use ego_transport::transport::signaling_hub::SignalingHub;
 #[cfg(not(target_arch = "wasm32"))]
-use ego_transport::transport::Transport;
+use std::sync::Arc;
 #[cfg(not(target_arch = "wasm32"))]
 use std::sync::atomic::{AtomicU32, Ordering};
-#[cfg(not(target_arch = "wasm32"))]
-use std::sync::Arc;
 #[cfg(not(target_arch = "wasm32"))]
 use std::time::Duration;
 
@@ -192,7 +192,11 @@ async fn run_signaling_peer(addr: &str, room: &str, name: &str) -> bool {
                 .send_message(&mut transport, &SignalingMessage::offer(room, &sdp))
                 .await
                 .ok();
-            let ice = IceCandidate::new("candidate:1 1 udp 2130706431 10.0.0.1 5000 typ host", "0", 0);
+            let ice = IceCandidate::new(
+                "candidate:1 1 udp 2130706431 10.0.0.1 5000 typ host",
+                "0",
+                0,
+            );
             client
                 .send_message(&mut transport, &SignalingMessage::ice(room, &ice))
                 .await

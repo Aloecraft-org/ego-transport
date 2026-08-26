@@ -16,9 +16,9 @@
 //   ROOM        - Room name (default: test-rtc-room)
 
 #[cfg(not(target_arch = "wasm32"))]
-use ego_transport::transport::rtc_signaling::IceServerConfig;
-#[cfg(not(target_arch = "wasm32"))]
 use ego_transport::transport::Transport;
+#[cfg(not(target_arch = "wasm32"))]
+use ego_transport::transport::rtc_signaling::IceServerConfig;
 #[cfg(not(target_arch = "wasm32"))]
 use std::time::Duration;
 
@@ -77,10 +77,7 @@ async fn main() {
         }
     }
 
-    log::info!(
-        "\n[Native] Done — handled {} messages",
-        msg_count
-    );
+    log::info!("\n[Native] Done — handled {} messages", msg_count);
 }
 
 #[cfg(target_arch = "wasm32")]

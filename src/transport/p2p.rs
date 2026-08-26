@@ -76,4 +76,4 @@ pub async fn connect_p2p(
         let rtc = RtcWasi::connect(signaling_url, room, ice_servers).await?;
         return Ok(Box::new(rtc) as Box<dyn Transport>);
     }
-}   
+}

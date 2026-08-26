@@ -69,8 +69,14 @@ async fn main() {
         "\n=== Signaling Protocol Test {} ===",
         if a_ok && b_ok { "PASSED" } else { "FAILED" }
     );
-    log::info!("  Peer-A (offerer):  {}", if a_ok { "✓ PASS" } else { "✗ FAIL" });
-    log::info!("  Peer-B (answerer): {}", if b_ok { "✓ PASS" } else { "✗ FAIL" });
+    log::info!(
+        "  Peer-A (offerer):  {}",
+        if a_ok { "✓ PASS" } else { "✗ FAIL" }
+    );
+    log::info!(
+        "  Peer-B (answerer): {}",
+        if b_ok { "✓ PASS" } else { "✗ FAIL" }
+    );
 
     ego_platform::sleep(Duration::from_secs(1)).await;
 }
@@ -145,7 +151,13 @@ async fn handle_server_peer(
 
             log::info!("[Server] Room '{}' matched!", room_name);
         } else {
-            map.insert(room_name.clone(), Room { peer_a_tx: my_tx, peer_b_tx: None });
+            map.insert(
+                room_name.clone(),
+                Room {
+                    peer_a_tx: my_tx,
+                    peer_b_tx: None,
+                },
+            );
             role = PeerRole::Offerer;
             log::info!("[Server] Room '{}' created, waiting for peer", room_name);
         }
@@ -252,33 +264,31 @@ async fn run_offerer(
 
     for _ in 0..10 {
         match client.recv_message(transport).await {
-            Ok(msg) => {
-                match msg.kind {
-                    SignalingKind::Answer => {
-                        log::info!(
-                            "[{}] ✓ Received SDP answer ({} bytes)",
-                            name,
-                            msg.payload.len()
-                        );
-                        assert!(msg.payload.contains("a=setup:active"));
-                        got_answer = true;
-                    }
-                    SignalingKind::Ice => {
-                        let candidate = IceCandidate::deserialize(&msg.payload);
-                        log::info!("[{}] ✓ Received ICE candidate: {:?}", name, candidate);
-                        got_ice = true;
-                    }
-                    SignalingKind::IceDone => {
-                        log::info!("[{}] ✓ Received ICE done", name);
-                        if got_answer && got_ice {
-                            break;
-                        }
-                    }
-                    other => {
-                        log::debug!("[{}] Received {:?}", name, other);
+            Ok(msg) => match msg.kind {
+                SignalingKind::Answer => {
+                    log::info!(
+                        "[{}] ✓ Received SDP answer ({} bytes)",
+                        name,
+                        msg.payload.len()
+                    );
+                    assert!(msg.payload.contains("a=setup:active"));
+                    got_answer = true;
+                }
+                SignalingKind::Ice => {
+                    let candidate = IceCandidate::deserialize(&msg.payload);
+                    log::info!("[{}] ✓ Received ICE candidate: {:?}", name, candidate);
+                    got_ice = true;
+                }
+                SignalingKind::IceDone => {
+                    log::info!("[{}] ✓ Received ICE done", name);
+                    if got_answer && got_ice {
+                        break;
                     }
                 }
-            }
+                other => {
+                    log::debug!("[{}] Received {:?}", name, other);
+                }
+            },
             Err(e) => {
                 log::error!("[{}] ✗ Recv failed: {:?}", name, e);
                 return false;

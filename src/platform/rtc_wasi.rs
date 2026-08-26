@@ -31,8 +31,8 @@
 
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
 use crate::transport::rtc_signaling::{
-    IceCandidate, IceServerConfig, CandidateProtocol, PeerRole,
-    SignalingKind, SignalingMessage, SdpBuilder,
+    CandidateProtocol, IceCandidate, IceServerConfig, PeerRole, SdpBuilder, SignalingKind,
+    SignalingMessage,
 };
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
 use crate::transport::{Transport, TransportError};
@@ -109,10 +109,7 @@ impl RtcWasi {
 
         // Build a candidate from whatever address info we can determine.
         // For relay-only connections this is informational, not functional.
-        let local_candidate = IceCandidate::from_addr(
-            "0.0.0.0:0",
-            CandidateProtocol::Tcp,
-        );
+        let local_candidate = IceCandidate::from_addr("0.0.0.0:0", CandidateProtocol::Tcp);
 
         match role {
             PeerRole::Offerer => {
@@ -143,7 +140,9 @@ impl RtcWasi {
                                 got_answer = true;
                             }
                             SignalingKind::IceDone => {
-                                if got_answer { break; }
+                                if got_answer {
+                                    break;
+                                }
                             }
                             SignalingKind::Ice => {
                                 log::debug!("[RTC WASI] Received ICE candidate (noted)");
@@ -337,9 +336,21 @@ fn base64_decode(s: &str) -> Option<Vec<u8>> {
     let mut i = 0;
     while i < bytes.len() {
         let b0 = decode_char(bytes[i])?;
-        let b1 = if i + 1 < bytes.len() { decode_char(bytes[i + 1])? } else { 0 };
-        let b2 = if i + 2 < bytes.len() { decode_char(bytes[i + 2])? } else { 0 };
-        let b3 = if i + 3 < bytes.len() { decode_char(bytes[i + 3])? } else { 0 };
+        let b1 = if i + 1 < bytes.len() {
+            decode_char(bytes[i + 1])?
+        } else {
+            0
+        };
+        let b2 = if i + 2 < bytes.len() {
+            decode_char(bytes[i + 2])?
+        } else {
+            0
+        };
+        let b3 = if i + 3 < bytes.len() {
+            decode_char(bytes[i + 3])?
+        } else {
+            0
+        };
 
         let triple = (b0 << 18) | (b1 << 12) | (b2 << 6) | b3;
 

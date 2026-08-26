@@ -53,7 +53,7 @@ use crate::transport::rtc_signaling::{
 };
 
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-use js_sys::{Array, Object, Reflect, JsString};
+use js_sys::{Array, JsString, Object, Reflect};
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 use std::cell::RefCell;
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
@@ -61,14 +61,14 @@ use std::rc::Rc;
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 use tokio::sync::mpsc;
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-use wasm_bindgen::prelude::*;
-#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 use wasm_bindgen::JsCast;
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+use wasm_bindgen::prelude::*;
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 use web_sys::{
     MessageEvent, RtcConfiguration, RtcDataChannel, RtcDataChannelEvent, RtcDataChannelInit,
-    RtcIceCandidate, RtcIceCandidateInit, RtcPeerConnection, RtcPeerConnectionIceEvent,
-    RtcSdpType, RtcSessionDescriptionInit,
+    RtcIceCandidate, RtcIceCandidateInit, RtcPeerConnection, RtcPeerConnectionIceEvent, RtcSdpType,
+    RtcSessionDescriptionInit,
 };
 
 // ─── Data Channel Label ──────────────────────────────────────────────────────
@@ -162,22 +162,21 @@ impl RtcBrowser {
 
         // Set up ICE candidate callback
         let ice_tx_clone = ice_tx.clone();
-        let on_ice_candidate =
-            Closure::wrap(Box::new(move |event: RtcPeerConnectionIceEvent| {
-                if let Some(candidate) = event.candidate() {
-                    let candidate_str = candidate.candidate();
-                    if candidate_str.is_empty() {
-                        // Empty candidate means ICE gathering is done
-                        return;
-                    }
-                    let ice = IceCandidate::new(
-                        &candidate_str,
-                        &candidate.sdp_mid().unwrap_or_default(),
-                        candidate.sdp_m_line_index().unwrap_or(0),
-                    );
-                    ice_tx_clone.send(ice).ok();
+        let on_ice_candidate = Closure::wrap(Box::new(move |event: RtcPeerConnectionIceEvent| {
+            if let Some(candidate) = event.candidate() {
+                let candidate_str = candidate.candidate();
+                if candidate_str.is_empty() {
+                    // Empty candidate means ICE gathering is done
+                    return;
                 }
-            }) as Box<dyn FnMut(_)>);
+                let ice = IceCandidate::new(
+                    &candidate_str,
+                    &candidate.sdp_mid().unwrap_or_default(),
+                    candidate.sdp_m_line_index().unwrap_or(0),
+                );
+                ice_tx_clone.send(ice).ok();
+            }
+        }) as Box<dyn FnMut(_)>);
 
         pc.set_onicecandidate(Some(on_ice_candidate.as_ref().unchecked_ref()));
         on_ice_candidate.forget(); // prevent GC — pc owns the callback lifetime
@@ -204,7 +203,10 @@ impl RtcBrowser {
             dc_init.ordered(true);
 
             dc = pc.create_data_channel_with_data_channel_dict(DATA_CHANNEL_LABEL, &dc_init);
-            log::info!("[RTC Browser] Created data channel '{}'", DATA_CHANNEL_LABEL);
+            log::info!(
+                "[RTC Browser] Created data channel '{}'",
+                DATA_CHANNEL_LABEL
+            );
 
             let (on_msg, on_close, on_err) =
                 wire_data_channel_callbacks(&dc, &dc_data_tx, &dc_closed, &dc_ready);
@@ -236,25 +238,21 @@ impl RtcBrowser {
             > = Rc::new(RefCell::new(None));
             let callback_holder_clone = callback_holder.clone();
 
-            let on_dc_event =
-                Closure::wrap(Box::new(move |event: RtcDataChannelEvent| {
-                    let channel = event.channel();
-                    log::info!(
-                        "[RTC Browser] Received data channel: '{}'",
-                        channel.label()
-                    );
+            let on_dc_event = Closure::wrap(Box::new(move |event: RtcDataChannelEvent| {
+                let channel = event.channel();
+                log::info!("[RTC Browser] Received data channel: '{}'", channel.label());
 
-                    let (on_msg, on_close, on_err) = wire_data_channel_callbacks(
-                        &channel,
-                        &dc_data_tx_clone,
-                        &dc_closed_clone,
-                        &dc_ready_clone,
-                    );
+                let (on_msg, on_close, on_err) = wire_data_channel_callbacks(
+                    &channel,
+                    &dc_data_tx_clone,
+                    &dc_closed_clone,
+                    &dc_ready_clone,
+                );
 
-                    // Store callbacks so they aren't dropped
-                    *callback_holder_clone.borrow_mut() = Some((on_msg, on_close, on_err));
-                    *dc_holder_clone.borrow_mut() = Some(channel);
-                }) as Box<dyn FnMut(_)>);
+                // Store callbacks so they aren't dropped
+                *callback_holder_clone.borrow_mut() = Some((on_msg, on_close, on_err));
+                *dc_holder_clone.borrow_mut() = Some(channel);
+            }) as Box<dyn FnMut(_)>);
 
             pc.set_ondatachannel(Some(on_dc_event.as_ref().unchecked_ref()));
             _on_datachannel = Some(on_dc_event);
@@ -439,10 +437,7 @@ async fn exchange_signaling_offerer(
         .as_string()
         .ok_or_else(|| TransportError::Protocol("Offer SDP is not a string".to_string()))?;
 
-    log::info!(
-        "[RTC Browser] Created offer ({} bytes)",
-        offer_sdp.len()
-    );
+    log::info!("[RTC Browser] Created offer ({} bytes)", offer_sdp.len());
 
     let mut offer_desc = RtcSessionDescriptionInit::new(RtcSdpType::Offer);
     offer_desc.sdp(&offer_sdp);
@@ -458,9 +453,7 @@ async fn exchange_signaling_offerer(
 
     // Send any ICE candidates that have already been collected
     while let Ok(ice) = ice_rx.try_recv() {
-        signal
-            .send_msg(&SignalingMessage::ice(room, &ice))
-            .await?;
+        signal.send_msg(&SignalingMessage::ice(room, &ice)).await?;
     }
 
     // Wait for answer and remote ICE candidates
@@ -469,9 +462,7 @@ async fn exchange_signaling_offerer(
     loop {
         // Drain local ICE candidates
         while let Ok(ice) = ice_rx.try_recv() {
-            signal
-                .send_msg(&SignalingMessage::ice(room, &ice))
-                .await?;
+            signal.send_msg(&SignalingMessage::ice(room, &ice)).await?;
         }
 
         let msg = signal.recv_msg().await?;
@@ -488,10 +479,7 @@ async fn exchange_signaling_offerer(
                 wasm_bindgen_futures::JsFuture::from(pc.set_remote_description(&answer_desc))
                     .await
                     .map_err(|e| {
-                        TransportError::Protocol(format!(
-                            "setRemoteDescription failed: {:?}",
-                            e
-                        ))
+                        TransportError::Protocol(format!("setRemoteDescription failed: {:?}", e))
                     })?;
 
                 got_answer = true;
@@ -513,21 +501,20 @@ async fn exchange_signaling_offerer(
                 ));
             }
             _ => {
-                log::debug!("[RTC Browser] Ignoring {:?} during offerer signaling", msg.kind);
+                log::debug!(
+                    "[RTC Browser] Ignoring {:?} during offerer signaling",
+                    msg.kind
+                );
             }
         }
     }
 
     // Send ICE done
-    signal
-        .send_msg(&SignalingMessage::ice_done(room))
-        .await?;
+    signal.send_msg(&SignalingMessage::ice_done(room)).await?;
 
     // Drain remaining ICE candidates
     while let Ok(ice) = ice_rx.try_recv() {
-        signal
-            .send_msg(&SignalingMessage::ice(room, &ice))
-            .await?;
+        signal.send_msg(&SignalingMessage::ice(room, &ice)).await?;
     }
 
     Ok(())
@@ -553,10 +540,7 @@ async fn exchange_signaling_answerer(
         let msg = signal.recv_msg().await?;
         match msg.kind {
             SignalingKind::Offer => {
-                log::info!(
-                    "[RTC Browser] Received offer ({} bytes)",
-                    msg.payload.len()
-                );
+                log::info!("[RTC Browser] Received offer ({} bytes)", msg.payload.len());
 
                 let mut offer_desc = RtcSessionDescriptionInit::new(RtcSdpType::Offer);
                 offer_desc.sdp(&msg.payload);
@@ -564,10 +548,7 @@ async fn exchange_signaling_answerer(
                 wasm_bindgen_futures::JsFuture::from(pc.set_remote_description(&offer_desc))
                     .await
                     .map_err(|e| {
-                        TransportError::Protocol(format!(
-                            "setRemoteDescription failed: {:?}",
-                            e
-                        ))
+                        TransportError::Protocol(format!("setRemoteDescription failed: {:?}", e))
                     })?;
 
                 // Apply any ICE candidates that arrived before the offer
@@ -594,7 +575,10 @@ async fn exchange_signaling_answerer(
                 ));
             }
             _ => {
-                log::debug!("[RTC Browser] Ignoring {:?} during answerer signaling", msg.kind);
+                log::debug!(
+                    "[RTC Browser] Ignoring {:?} during answerer signaling",
+                    msg.kind
+                );
             }
         }
     }
@@ -609,10 +593,7 @@ async fn exchange_signaling_answerer(
         .as_string()
         .ok_or_else(|| TransportError::Protocol("Answer SDP is not a string".to_string()))?;
 
-    log::info!(
-        "[RTC Browser] Created answer ({} bytes)",
-        answer_sdp.len()
-    );
+    log::info!("[RTC Browser] Created answer ({} bytes)", answer_sdp.len());
 
     let mut answer_desc = RtcSessionDescriptionInit::new(RtcSdpType::Answer);
     answer_desc.sdp(&answer_sdp);
@@ -628,18 +609,14 @@ async fn exchange_signaling_answerer(
 
     // Send any local ICE candidates
     while let Ok(ice) = ice_rx.try_recv() {
-        signal
-            .send_msg(&SignalingMessage::ice(room, &ice))
-            .await?;
+        signal.send_msg(&SignalingMessage::ice(room, &ice)).await?;
     }
 
     // Continue receiving remote ICE candidates until done
     loop {
         // Drain local ICE candidates
         while let Ok(ice) = ice_rx.try_recv() {
-            signal
-                .send_msg(&SignalingMessage::ice(room, &ice))
-                .await?;
+            signal.send_msg(&SignalingMessage::ice(room, &ice)).await?;
         }
 
         // Non-blocking check for more signaling messages.
@@ -668,15 +645,11 @@ async fn exchange_signaling_answerer(
     }
 
     // Send ICE done
-    signal
-        .send_msg(&SignalingMessage::ice_done(room))
-        .await?;
+    signal.send_msg(&SignalingMessage::ice_done(room)).await?;
 
     // Drain remaining
     while let Ok(ice) = ice_rx.try_recv() {
-        signal
-            .send_msg(&SignalingMessage::ice(room, &ice))
-            .await?;
+        signal.send_msg(&SignalingMessage::ice(room, &ice)).await?;
     }
 
     Ok(())
@@ -725,10 +698,14 @@ fn create_peer_connection(
 
     config.set_ice_servers(&servers);
 
-    let pc = RtcPeerConnection::new_with_configuration(&config)
-        .map_err(|e| TransportError::Protocol(format!("Failed to create RTCPeerConnection: {:?}", e)))?;
+    let pc = RtcPeerConnection::new_with_configuration(&config).map_err(|e| {
+        TransportError::Protocol(format!("Failed to create RTCPeerConnection: {:?}", e))
+    })?;
 
-    log::info!("[RTC Browser] Created RTCPeerConnection with {} ICE servers", ice_servers.len());
+    log::info!(
+        "[RTC Browser] Created RTCPeerConnection with {} ICE servers",
+        ice_servers.len()
+    );
 
     Ok(pc)
 }
@@ -776,7 +753,7 @@ fn wire_data_channel_callbacks(
 
     // onmessage
     let tx = data_tx.clone();
-    let on_message = Closure::wrap(Box::new( move |event: MessageEvent| {
+    let on_message = Closure::wrap(Box::new(move |event: MessageEvent| {
         if let Ok(array_buffer) = event.data().dyn_into::<js_sys::ArrayBuffer>() {
             let uint8 = js_sys::Uint8Array::new(&array_buffer);
             let data = uint8.to_vec();
@@ -849,7 +826,10 @@ impl SignalingTransport {
             } else if let Ok(array_buffer) = event.data().dyn_into::<js_sys::ArrayBuffer>() {
                 let uint8 = js_sys::Uint8Array::new(&array_buffer);
                 let bytes = uint8.to_vec();
-                log::info!("[SignalingTransport] on_message BINARY: {} bytes", bytes.len());
+                log::info!(
+                    "[SignalingTransport] on_message BINARY: {} bytes",
+                    bytes.len()
+                );
                 if let Ok(text) = String::from_utf8(bytes) {
                     tx_clone.send(text).ok();
                 }
@@ -873,8 +853,8 @@ impl SignalingTransport {
             attempts += 1;
             if ws.ready_state() == web_sys::WebSocket::CLOSED {
                 ws.set_onmessage(None);
-                    ws.set_onopen(None);
-                    ws.close().ok();
+                ws.set_onopen(None);
+                ws.close().ok();
                 return Err(TransportError::Protocol(
                     "Signaling WebSocket connection failed".to_string(),
                 ));
@@ -883,8 +863,8 @@ impl SignalingTransport {
 
         if !*connected.borrow() {
             ws.set_onmessage(None);
-                ws.set_onopen(None);
-                ws.close().ok();
+            ws.set_onopen(None);
+            ws.close().ok();
             return Err(TransportError::Protocol(
                 "Signaling WebSocket connection timeout".to_string(),
             ));

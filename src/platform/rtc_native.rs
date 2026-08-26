@@ -48,8 +48,10 @@ use crate::transport::{Transport, TransportError};
 #[cfg(not(target_arch = "wasm32"))]
 use std::sync::Arc;
 #[cfg(not(target_arch = "wasm32"))]
-use tokio::sync::{mpsc, Mutex, Notify};
+use tokio::sync::{Mutex, Notify, mpsc};
 
+#[cfg(not(target_arch = "wasm32"))]
+use webrtc::api::APIBuilder;
 #[cfg(not(target_arch = "wasm32"))]
 use webrtc::api::interceptor_registry::register_default_interceptors;
 #[cfg(not(target_arch = "wasm32"))]
@@ -57,11 +59,9 @@ use webrtc::api::media_engine::MediaEngine;
 #[cfg(not(target_arch = "wasm32"))]
 use webrtc::api::setting_engine::SettingEngine;
 #[cfg(not(target_arch = "wasm32"))]
-use webrtc::api::APIBuilder;
+use webrtc::data_channel::RTCDataChannel;
 #[cfg(not(target_arch = "wasm32"))]
 use webrtc::data_channel::data_channel_message::DataChannelMessage;
-#[cfg(not(target_arch = "wasm32"))]
-use webrtc::data_channel::RTCDataChannel;
 #[cfg(not(target_arch = "wasm32"))]
 use webrtc::ice_transport::ice_candidate::RTCIceCandidateInit;
 #[cfg(not(target_arch = "wasm32"))]
@@ -69,11 +69,11 @@ use webrtc::ice_transport::ice_server::RTCIceServer;
 #[cfg(not(target_arch = "wasm32"))]
 use webrtc::interceptor::registry::Registry;
 #[cfg(not(target_arch = "wasm32"))]
+use webrtc::peer_connection::RTCPeerConnection;
+#[cfg(not(target_arch = "wasm32"))]
 use webrtc::peer_connection::configuration::RTCConfiguration;
 #[cfg(not(target_arch = "wasm32"))]
 use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
-#[cfg(not(target_arch = "wasm32"))]
-use webrtc::peer_connection::RTCPeerConnection;
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -200,8 +200,7 @@ impl RtcNative {
             exchange_signaling_offerer(&pc, &mut signal_transport, &mut ice_rx, room).await?;
         } else {
             // Answerer waits for data channel from offerer
-            let dc_holder: Arc<Mutex<Option<Arc<RTCDataChannel>>>> =
-                Arc::new(Mutex::new(None));
+            let dc_holder: Arc<Mutex<Option<Arc<RTCDataChannel>>>> = Arc::new(Mutex::new(None));
             let dc_holder_clone = dc_holder.clone();
             let data_tx_clone = data_tx.clone();
             let dc_open_clone = dc_open.clone();
@@ -212,10 +211,7 @@ impl RtcNative {
                 let dc_open = dc_open_clone.clone();
 
                 Box::pin(async move {
-                    log::info!(
-                        "[RTC Native] Received data channel: '{}'",
-                        channel.label()
-                    );
+                    log::info!("[RTC Native] Received data channel: '{}'", channel.label());
                     wire_data_channel_callbacks(&channel, data_tx, dc_open).await;
                     *dc_holder.lock().await = Some(channel);
                 })
@@ -449,10 +445,7 @@ async fn exchange_signaling_offerer(
         let msg = recv_signal(signal).await?;
         match msg.kind {
             SignalingKind::Answer => {
-                log::info!(
-                    "[RTC Native] Received answer ({} bytes)",
-                    msg.payload.len()
-                );
+                log::info!("[RTC Native] Received answer ({} bytes)", msg.payload.len());
                 let answer = RTCSessionDescription::answer(msg.payload)
                     .map_err(|e| TransportError::Protocol(format!("Bad answer SDP: {}", e)))?;
                 pc.set_remote_description(answer).await.map_err(|e| {
@@ -504,10 +497,7 @@ async fn exchange_signaling_answerer(
         let msg = recv_signal(signal).await?;
         match msg.kind {
             SignalingKind::Offer => {
-                log::info!(
-                    "[RTC Native] Received offer ({} bytes)",
-                    msg.payload.len()
-                );
+                log::info!("[RTC Native] Received offer ({} bytes)", msg.payload.len());
                 let offer = RTCSessionDescription::offer(msg.payload)
                     .map_err(|e| TransportError::Protocol(format!("Bad offer SDP: {}", e)))?;
                 pc.set_remote_description(offer).await.map_err(|e| {

@@ -8,8 +8,8 @@
 //! - `collect_actor_events`: Generic orchestrator event collector.
 
 use crate::common::test_actor::{SignalingRole, SignalingTestActor, SignalingTestEvent};
-use ego_proc::actor::Orchestrator;
 use ego_proc::OrchestrationStrategy;
+use ego_proc::actor::Orchestrator;
 use std::time::Duration;
 
 // ─── Orchestrator helpers ────────────────────────────────────────────────────
@@ -40,12 +40,10 @@ pub async fn run_signaling_test(
             orch.maintain().await;
             while let Some((_id, event)) = orch.recv_output() {
                 match &event {
-                    SignalingTestEvent::Complete { role, .. } => {
-                        match role {
-                            SignalingRole::Offerer => offerer_result = Some(event.clone()),
-                            SignalingRole::Answerer => answerer_result = Some(event.clone()),
-                        }
-                    }
+                    SignalingTestEvent::Complete { role, .. } => match role {
+                        SignalingRole::Offerer => offerer_result = Some(event.clone()),
+                        SignalingRole::Answerer => answerer_result = Some(event.clone()),
+                    },
                     _ => {}
                 }
             }
@@ -54,7 +52,8 @@ pub async fn run_signaling_test(
             }
             ego_platform::sleep(Duration::from_millis(50)).await;
         }
-    }).await;
+    })
+    .await;
 
     (offerer_result, answerer_result)
 }
@@ -74,11 +73,14 @@ pub async fn collect_actor_events<S: ego_proc::actor::ActorState + 'static>(
             while let Some((id, event)) = orch.recv_output() {
                 let done = predicate(&event);
                 events.push((id, event));
-                if done { return; }
+                if done {
+                    return;
+                }
             }
             ego_platform::sleep(Duration::from_millis(50)).await;
         }
-    }).await;
+    })
+    .await;
     events
 }
 
@@ -89,17 +91,23 @@ pub async fn collect_actor_events<S: ego_proc::actor::ActorState + 'static>(
 /// Native-only. Runs until either side disconnects.
 #[cfg(not(target_arch = "wasm32"))]
 pub async fn run_dumb_relay(addr: &str) {
-    use ego_transport::platform::tcp_native::TcpListenerNative;
     use ego_transport::platform::server::Listener;
+    use ego_transport::platform::tcp_native::TcpListenerNative;
     use ego_transport::transport::Transport;
 
     let listener = TcpListenerNative::bind(addr).expect("Failed to bind relay");
     log::info!("[DumbRelay] Listening on {}", addr);
 
-    let mut conn_a = listener.accept().await.expect("Failed to accept first connection");
+    let mut conn_a = listener
+        .accept()
+        .await
+        .expect("Failed to accept first connection");
     log::info!("[DumbRelay] First peer connected");
 
-    let mut conn_b = listener.accept().await.expect("Failed to accept second connection");
+    let mut conn_b = listener
+        .accept()
+        .await
+        .expect("Failed to accept second connection");
     log::info!("[DumbRelay] Second peer connected");
 
     let mut buf_ab = [0u8; 65536];
@@ -133,12 +141,15 @@ pub async fn run_dumb_relay(addr: &str) {
 /// Callers must connect them in sequence: peer→relay[0], relay[0]→relay[1], ..., relay[n]→peer.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn spawn_dumb_relay_chain(addrs: &[&str]) -> Vec<ego_platform::TaskHandle<()>> {
-    addrs.iter().map(|addr| {
-        let addr = addr.to_string();
-        ego_platform::spawn(async move {
-            run_dumb_relay(&addr).await;
+    addrs
+        .iter()
+        .map(|addr| {
+            let addr = addr.to_string();
+            ego_platform::spawn(async move {
+                run_dumb_relay(&addr).await;
+            })
         })
-    }).collect()
+        .collect()
 }
 
 /// Connect two relays: opens a connection to `from_addr` (as that relay's
@@ -148,11 +159,13 @@ pub fn spawn_dumb_relay_chain(addrs: &[&str]) -> Vec<ego_platform::TaskHandle<()
 pub async fn run_bridge(from_addr: &str, to_addr: &str) {
     use ego_transport::transport::Transport;
 
-    let mut conn_from = ego_transport::transport::connect(from_addr).await
+    let mut conn_from = ego_transport::transport::connect(from_addr)
+        .await
         .expect("Bridge: connect to source failed");
     log::info!("[Bridge] Connected to {}", from_addr);
 
-    let mut conn_to = ego_transport::transport::connect(to_addr).await
+    let mut conn_to = ego_transport::transport::connect(to_addr)
+        .await
         .expect("Bridge: connect to destination failed");
     log::info!("[Bridge] Connected to {}", to_addr);
 
@@ -191,7 +204,8 @@ pub fn spawn_signaling_hub_fixture(addr: &str) -> ego_platform::TaskHandle<()> {
     let addr = addr.to_string();
     ego_platform::spawn(async move {
         let hub = SignalingHub::new();
-        let listener = AutoDetectListener::bind(&addr).await
+        let listener = AutoDetectListener::bind(&addr)
+            .await
             .expect("Failed to bind signaling hub fixture");
         log::info!("[HubFixture] Listening on {} with SignalingHub", addr);
 
@@ -210,10 +224,15 @@ pub fn spawn_signaling_hub_fixture(addr: &str) -> ego_platform::TaskHandle<()> {
 /// Signaling peers go to the hub; non-signaling connections get echoed.
 /// Returns (task_handle, app_connection_counter).
 #[cfg(not(target_arch = "wasm32"))]
-pub fn spawn_echo_fixture(addr: &str) -> (ego_platform::TaskHandle<()>, std::sync::Arc<std::sync::atomic::AtomicU32>) {
+pub fn spawn_echo_fixture(
+    addr: &str,
+) -> (
+    ego_platform::TaskHandle<()>,
+    std::sync::Arc<std::sync::atomic::AtomicU32>,
+) {
     use ego_transport::platform::server::{AutoDetectListener, ServerBuilder};
-    use ego_transport::transport::signaling_hub::SignalingHub;
     use ego_transport::transport::Transport;
+    use ego_transport::transport::signaling_hub::SignalingHub;
     use std::sync::Arc;
     use std::sync::atomic::{AtomicU32, Ordering};
 
@@ -223,9 +242,13 @@ pub fn spawn_echo_fixture(addr: &str) -> (ego_platform::TaskHandle<()>, std::syn
 
     let handle = ego_platform::spawn(async move {
         let hub = SignalingHub::new();
-        let listener = AutoDetectListener::bind(&addr).await
+        let listener = AutoDetectListener::bind(&addr)
+            .await
             .expect("Failed to bind echo fixture");
-        log::info!("[EchoFixture] Listening on {} with SignalingHub + echo", addr);
+        log::info!(
+            "[EchoFixture] Listening on {} with SignalingHub + echo",
+            addr
+        );
 
         ServerBuilder::new(listener.with_signaling(hub))
             .concurrent()
@@ -237,7 +260,9 @@ pub fn spawn_echo_fixture(addr: &str) -> (ego_platform::TaskHandle<()>, std::syn
                     let mut buf = [0u8; 4096];
                     loop {
                         match transport.recv(&mut buf).await {
-                            Ok(n) => { transport.send(&buf[..n]).await.ok(); }
+                            Ok(n) => {
+                                transport.send(&buf[..n]).await.ok();
+                            }
                             Err(_) => break,
                         }
                     }
@@ -255,7 +280,9 @@ pub fn spawn_echo_fixture(addr: &str) -> (ego_platform::TaskHandle<()>, std::syn
 /// Assert a SignalingTestEvent is Complete with success=true
 pub fn assert_signaling_success(event: &Option<SignalingTestEvent>, label: &str) {
     match event {
-        Some(SignalingTestEvent::Complete { success, detail, .. }) => {
+        Some(SignalingTestEvent::Complete {
+            success, detail, ..
+        }) => {
             assert!(*success, "{} failed: {}", label, detail);
             log::info!("[{}] ✓ {}", label, detail);
         }
@@ -270,16 +297,26 @@ pub fn assert_signaling_success(event: &Option<SignalingTestEvent>, label: &str)
 
 /// Send data and verify echo response over a transport.
 #[cfg(not(target_arch = "wasm32"))]
-pub async fn assert_echo(transport: &mut Box<dyn ego_transport::transport::Transport>, msg: &[u8], label: &str) {
+pub async fn assert_echo(
+    transport: &mut Box<dyn ego_transport::transport::Transport>,
+    msg: &[u8],
+    label: &str,
+) {
     use ego_transport::transport::Transport;
 
     log::debug!("[assert_echo]: {:?}", msg);
-    transport.send(msg).await.unwrap_or_else(|e| panic!("[{}] send failed: {:?}", label, e));
+    transport
+        .send(msg)
+        .await
+        .unwrap_or_else(|e| panic!("[{}] send failed: {:?}", label, e));
 
     let mut buf = [0u8; 4096];
 
     log::debug!("[assert_echo]: awaiting response... (transport.recv)");
-    let n = transport.recv(&mut buf).await.unwrap_or_else(|e| panic!("[{}] recv failed: {:?}", label, e));
+    let n = transport
+        .recv(&mut buf)
+        .await
+        .unwrap_or_else(|e| panic!("[{}] recv failed: {:?}", label, e));
     log::debug!("[assert_echo]: transport.recv returned!");
 
     assert_eq!(&buf[..n], msg, "[{}] echo mismatch", label);

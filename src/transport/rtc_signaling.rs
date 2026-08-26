@@ -315,7 +315,10 @@ impl IceCandidate {
 
     /// Serialize to wire format: "candidate|sdpMid|sdpMLineIndex"
     pub fn serialize(&self) -> String {
-        format!("{}|{}|{}", self.candidate, self.sdp_mid, self.sdp_mline_index)
+        format!(
+            "{}|{}|{}",
+            self.candidate, self.sdp_mid, self.sdp_mline_index
+        )
     }
 
     /// Deserialize from wire format.
@@ -457,9 +460,7 @@ fn generate_ice_ufrag() -> String {
 fn generate_ice_pwd() -> String {
     let mut seed = 0u64;
     let stack_addr = &seed as *const u64 as u64;
-    seed = stack_addr
-        .wrapping_mul(6364136223846793005)
-        .wrapping_add(3);
+    seed = stack_addr.wrapping_mul(6364136223846793005).wrapping_add(3);
 
     #[cfg(not(target_arch = "wasm32"))]
     {
@@ -545,11 +546,17 @@ impl IceServerConfig {
 ///   overlay network without needing a separate signaling server.
 /// - **Transport wrapper**: Any `Box<dyn Transport>` can be wrapped as a
 ///   `SignalingChannel` by serializing/deserializing `SignalingMessage` as text.
-#[cfg_attr(not(all(target_arch = "wasm32", target_os = "unknown")), async_trait::async_trait)]
+#[cfg_attr(
+    not(all(target_arch = "wasm32", target_os = "unknown")),
+    async_trait::async_trait
+)]
 #[cfg_attr(all(target_arch = "wasm32", target_os = "unknown"), async_trait::async_trait(?Send))]
 pub trait SignalingChannel {
     /// Send a signaling message to the remote peer.
-    async fn send_signal(&mut self, msg: &SignalingMessage) -> Result<(), crate::transport::TransportError>;
+    async fn send_signal(
+        &mut self,
+        msg: &SignalingMessage,
+    ) -> Result<(), crate::transport::TransportError>;
 
     /// Receive the next signaling message from the remote peer.
     /// Returns None if the channel is closed.
@@ -574,14 +581,23 @@ pub struct TransportSignalingChannel {
 
 impl TransportSignalingChannel {
     pub fn new(transport: Box<dyn crate::transport::Transport>) -> Self {
-        Self { transport, pending: String::new() }
+        Self {
+            transport,
+            pending: String::new(),
+        }
     }
 }
 
-#[cfg_attr(not(all(target_arch = "wasm32", target_os = "unknown")), async_trait::async_trait)]
+#[cfg_attr(
+    not(all(target_arch = "wasm32", target_os = "unknown")),
+    async_trait::async_trait
+)]
 #[cfg_attr(all(target_arch = "wasm32", target_os = "unknown"), async_trait::async_trait(?Send))]
 impl SignalingChannel for TransportSignalingChannel {
-    async fn send_signal(&mut self, msg: &SignalingMessage) -> Result<(), crate::transport::TransportError> {
+    async fn send_signal(
+        &mut self,
+        msg: &SignalingMessage,
+    ) -> Result<(), crate::transport::TransportError> {
         let mut wire = msg.serialize();
         wire.push('\n');
         self.transport.send(wire.as_bytes()).await
