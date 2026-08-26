@@ -47,6 +47,8 @@
 //! The standalone `signaling_server` binary becomes a thin wrapper:
 //!
 //! ```no_run
+//! # #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+//! # mod example {
 //! # async fn run() -> Result<(), ego_transport::transport::TransportError> {
 //!
 //! use ego_transport::platform::server::{ServerBuilder, AutoDetectListener};
@@ -63,6 +65,7 @@
 //!     .await?;
 //!
 //! # Ok(())
+//! # }
 //! # }
 //! ```
 

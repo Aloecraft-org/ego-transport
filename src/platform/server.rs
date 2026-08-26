@@ -22,6 +22,8 @@
 //! messages). Application connections pass through to `ServerBuilder` as normal.
 //!
 //! ```no_run
+//! # #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+//! # mod example {
 //! use ego_transport::platform::server::{AutoDetectListener, ServerBuilder};
 //! use ego_transport::transport::signaling_hub::SignalingHub;
 //!
@@ -43,6 +45,7 @@
 //!         .await
 //!         .expect("Server error");
 //! }
+//! # }
 //! ```
 //!
 //! For a signaling-only server (no application handler), the handler can

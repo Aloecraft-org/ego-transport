@@ -210,10 +210,8 @@ async fn run_signaling_peer(addr: &str, room: &str, name: &str) -> bool {
                             log::info!("[{}] ✓ Received answer", name);
                             got_answer = true;
                         }
-                        SignalingKind::IceDone => {
-                            if got_answer {
-                                break;
-                            }
+                        SignalingKind::IceDone if got_answer => {
+                            break;
                         }
                         _ => {}
                     },
@@ -232,10 +230,8 @@ async fn run_signaling_peer(addr: &str, room: &str, name: &str) -> bool {
                             log::info!("[{}] ✓ Received offer", name);
                             got_offer = true;
                         }
-                        SignalingKind::IceDone => {
-                            if got_offer {
-                                break;
-                            }
+                        SignalingKind::IceDone if got_offer => {
+                            break;
                         }
                         _ => {}
                     },
