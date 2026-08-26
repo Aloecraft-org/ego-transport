@@ -39,12 +39,10 @@ pub async fn run_signaling_test(
         loop {
             orch.maintain().await;
             while let Some((_id, event)) = orch.recv_output() {
-                match &event {
-                    SignalingTestEvent::Complete { role, .. } => match role {
-                        SignalingRole::Offerer => offerer_result = Some(event.clone()),
-                        SignalingRole::Answerer => answerer_result = Some(event.clone()),
-                    },
-                    _ => {}
+                let SignalingTestEvent::Complete { role, .. } = &event;
+                match role {
+                    SignalingRole::Offerer => offerer_result = Some(event.clone()),
+                    SignalingRole::Answerer => answerer_result = Some(event.clone()),
                 }
             }
             if offerer_result.is_some() && answerer_result.is_some() {
@@ -234,7 +232,7 @@ pub fn spawn_echo_fixture(
     use ego_transport::transport::Transport;
     use ego_transport::transport::signaling_hub::SignalingHub;
     use std::sync::Arc;
-    use std::sync::atomic::{AtomicU32, Ordering};
+    use std::sync::atomic::AtomicU32;
 
     let counter = Arc::new(AtomicU32::new(0));
     let counter_clone = counter.clone();
@@ -258,13 +256,8 @@ pub fn spawn_echo_fixture(
                     count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                     log::info!("[EchoFixture] App connection received {:?}", count);
                     let mut buf = [0u8; 4096];
-                    loop {
-                        match transport.recv(&mut buf).await {
-                            Ok(n) => {
-                                transport.send(&buf[..n]).await.ok();
-                            }
-                            Err(_) => break,
-                        }
+                    while let Ok(n) = transport.recv(&mut buf).await {
+                        transport.send(&buf[..n]).await.ok();
                     }
                 }
             })
@@ -288,9 +281,6 @@ pub fn assert_signaling_success(event: &Option<SignalingTestEvent>, label: &str)
         }
         None => {
             panic!("{} timed out — no result", label);
-        }
-        _ => {
-            panic!("{} unexpected event type", label);
         }
     }
 }

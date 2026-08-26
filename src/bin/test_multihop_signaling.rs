@@ -16,7 +16,6 @@ use ego_transport::platform::server::{AutoDetectListener, Listener};
 #[cfg(not(target_arch = "wasm32"))]
 use ego_transport::transport::rtc_signaling::*;
 #[cfg(not(target_arch = "wasm32"))]
-use ego_transport::transport::{Transport, TransportError};
 #[cfg(not(target_arch = "wasm32"))]
 use std::time::Duration;
 

@@ -1,5 +1,3 @@
-use std::fmt::format;
-
 use crate::transport::{Transport, TransportError, TransportKind};
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -33,6 +31,11 @@ pub async fn connect(
     Err(TransportError::Unsupported(format!("{:?}", kind)))
 }
 
+// `addr` is unused in the browser arm, where TCP is not available.
+#[cfg_attr(
+    all(target_arch = "wasm32", target_os = "unknown"),
+    allow(unused_variables)
+)]
 pub async fn connect_tcp(addr: &str) -> Result<Box<dyn Transport>, TransportError> {
     #[cfg(not(target_arch = "wasm32"))]
     return Ok(Box::new(TcpStreamNative::connect(addr).await?));

@@ -16,8 +16,6 @@
 // Native imports — client side
 // ═══════════════════════════════════════════════════════════════════════════════
 #[cfg(not(target_arch = "wasm32"))]
-use ego_transport::platform;
-#[cfg(not(target_arch = "wasm32"))]
 use ego_transport::platform::tcp_native::TcpStreamNative;
 #[cfg(not(target_arch = "wasm32"))]
 use ego_transport::platform::ws_native::WebSocketNative;
@@ -30,11 +28,7 @@ use std::time::Duration;
 // WASI imports — server side
 // ═══════════════════════════════════════════════════════════════════════════════
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
-use ego_transport::platform;
-#[cfg(all(target_arch = "wasm32", target_env = "p2"))]
 use ego_transport::platform::server::{AutoDetectListener, Listener};
-#[cfg(all(target_arch = "wasm32", target_env = "p2"))]
-use ego_transport::transport::Transport;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // NATIVE — sequential clients

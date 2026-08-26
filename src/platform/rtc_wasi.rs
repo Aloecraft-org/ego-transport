@@ -250,9 +250,8 @@ impl Transport for RtcWasi {
             let text = String::from_utf8_lossy(&recv_buf[..n]);
 
             // Check for DATA message
-            if text.starts_with("DATA:") {
+            if let Some(rest) = text.strip_prefix("DATA:") {
                 // Parse: DATA:room:base64payload
-                let rest = &text[5..];
                 if let Some(colon_pos) = rest.find(':') {
                     let payload_b64 = &rest[colon_pos + 1..];
                     if let Some(decoded) = base64_decode(payload_b64) {
@@ -291,10 +290,12 @@ impl Transport for RtcWasi {
 // We avoid pulling in the `base64` crate for this single use case.
 // These are standard RFC 4648 base64 encode/decode.
 
+#[cfg(all(target_arch = "wasm32", target_env = "p2"))]
 const B64_CHARS: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
+#[cfg(all(target_arch = "wasm32", target_env = "p2"))]
 fn base64_encode(data: &[u8]) -> String {
-    let mut result = String::with_capacity((data.len() + 2) / 3 * 4);
+    let mut result = String::with_capacity(data.len().div_ceil(3) * 4);
     for chunk in data.chunks(3) {
         let b0 = chunk[0] as u32;
         let b1 = if chunk.len() > 1 { chunk[1] as u32 } else { 0 };
@@ -317,6 +318,7 @@ fn base64_encode(data: &[u8]) -> String {
     result
 }
 
+#[cfg(all(target_arch = "wasm32", target_env = "p2"))]
 fn base64_decode(s: &str) -> Option<Vec<u8>> {
     let s = s.trim_end_matches('=');
     let mut result = Vec::with_capacity(s.len() * 3 / 4);

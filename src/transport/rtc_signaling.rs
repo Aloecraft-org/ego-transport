@@ -238,6 +238,10 @@ impl fmt::Display for PeerRole {
 }
 
 impl PeerRole {
+    /// Parse a role name ("offerer"/"answerer"). Named `from_str` for
+    /// historical callers; not the `std::str::FromStr` trait because the
+    /// failure case carries no error value.
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Option<Self> {
         match s.trim() {
             "offerer" => Some(Self::Offerer),
@@ -364,6 +368,12 @@ pub struct SdpBuilder {
     /// DTLS fingerprint (SHA-256). In production this comes from the certificate.
     /// For WASI peers connecting through a relay, this can be a placeholder.
     pub fingerprint: String,
+}
+
+impl Default for SdpBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl SdpBuilder {

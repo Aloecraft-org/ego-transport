@@ -24,8 +24,3 @@ pub use platform::tcp_wasi::TcpStreamWasi;
 
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
 pub use platform::ws_wasi::WebSocketWasi;
-
-use std::time::Duration;
-
-#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-use wasm_bindgen::prelude::*;

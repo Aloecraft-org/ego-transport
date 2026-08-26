@@ -8,6 +8,7 @@
 //! but on WASI where streams have no peek support, the detection bytes are read and
 //! must be replayed. This type is the mechanism for that replay.
 
+#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 use crate::transport::{Transport, TransportError};
 
 /// A transport that delivers buffered prefix bytes before delegating to an inner transport.

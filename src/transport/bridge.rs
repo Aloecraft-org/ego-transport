@@ -57,10 +57,10 @@ impl AsyncRead for TransportBridge {
             match fut.poll(cx) {
                 Poll::Ready(Ok(n)) => n,
                 Poll::Ready(Err(e)) => {
-                    return Poll::Ready(Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        format!("Transport error: {:?}", e),
-                    )));
+                    return Poll::Ready(Err(std::io::Error::other(format!(
+                        "Transport error: {:?}",
+                        e
+                    ))));
                 }
                 Poll::Pending => return Poll::Pending,
             }
@@ -96,10 +96,10 @@ impl AsyncWrite for TransportBridge {
 
         match fut.poll(cx) {
             Poll::Ready(Ok(())) => Poll::Ready(Ok(len)),
-            Poll::Ready(Err(e)) => Poll::Ready(Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Transport error: {:?}", e),
-            ))),
+            Poll::Ready(Err(e)) => Poll::Ready(Err(std::io::Error::other(format!(
+                "Transport error: {:?}",
+                e
+            )))),
             Poll::Pending => Poll::Pending,
         }
     }

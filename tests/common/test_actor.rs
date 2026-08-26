@@ -198,9 +198,8 @@ impl ActorState for SignalingTestActor {
     }
 
     async fn on_tick(&mut self) -> anyhow::Result<bool> {
-        match &self.phase {
-            Phase::Done { .. } => return Ok(false),
-            _ => {}
+        if let Phase::Done { .. } = &self.phase {
+            return Ok(false);
         }
 
         match std::mem::replace(

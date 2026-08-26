@@ -7,6 +7,8 @@
 //! ## Usage
 //!
 //! ```no_run
+//! # #[cfg(not(target_arch = "wasm32"))]
+//! # mod example {
 //! use ego_transport::platform::rtc_native::RtcNative;
 //! use ego_transport::transport::rtc_signaling::IceServerConfig;
 //! use ego_transport::transport::Transport;
@@ -22,6 +24,7 @@
 //!     let mut buf = [0u8; 1024];
 //!     let n = rtc.recv(&mut buf).await.unwrap();
 //! }
+//! # }
 //! ```
 //!
 //! ## Architecture
@@ -56,8 +59,6 @@ use webrtc::api::APIBuilder;
 use webrtc::api::interceptor_registry::register_default_interceptors;
 #[cfg(not(target_arch = "wasm32"))]
 use webrtc::api::media_engine::MediaEngine;
-#[cfg(not(target_arch = "wasm32"))]
-use webrtc::api::setting_engine::SettingEngine;
 #[cfg(not(target_arch = "wasm32"))]
 use webrtc::data_channel::RTCDataChannel;
 #[cfg(not(target_arch = "wasm32"))]
@@ -165,7 +166,7 @@ impl RtcNative {
                         .unwrap_or_default();
                     let sdp_mline_index = c
                         .to_json()
-                        .map(|j| j.sdp_mline_index.unwrap_or(0) as u16)
+                        .map(|j| j.sdp_mline_index.unwrap_or(0))
                         .unwrap_or(0);
 
                     let ice = IceCandidate::new(&candidate_str, &sdp_mid, sdp_mline_index);
@@ -317,7 +318,6 @@ async fn create_peer_connection(
                 urls: s.urls.clone(),
                 username: s.username.clone().unwrap_or_default(),
                 credential: s.credential.clone().unwrap_or_default(),
-                ..Default::default()
             })
             .collect(),
         ..Default::default()

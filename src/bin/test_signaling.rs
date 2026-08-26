@@ -316,7 +316,7 @@ async fn run_answerer(
     // Wait for offer
     let mut got_offer = false;
     let mut got_ice = false;
-    let mut offer_sdp = String::new();
+    let mut _offer_sdp = String::new();
 
     for _ in 0..10 {
         match client.recv_message(transport).await {
@@ -328,7 +328,7 @@ async fn run_answerer(
                         msg.payload.len()
                     );
                     assert!(msg.payload.contains("a=setup:actpass"));
-                    offer_sdp = msg.payload;
+                    _offer_sdp = msg.payload;
                     got_offer = true;
                 }
                 SignalingKind::Ice => {

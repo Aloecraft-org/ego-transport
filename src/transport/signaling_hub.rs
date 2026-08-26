@@ -47,6 +47,8 @@
 //! The standalone `signaling_server` binary becomes a thin wrapper:
 //!
 //! ```no_run
+//! # #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+//! # mod example {
 //! # async fn run() -> Result<(), ego_transport::transport::TransportError> {
 //!
 //! use ego_transport::platform::server::{ServerBuilder, AutoDetectListener};
@@ -63,6 +65,7 @@
 //!     .await?;
 //!
 //! # Ok(())
+//! # }
 //! # }
 //! ```
 
@@ -101,6 +104,12 @@ struct Room {
 #[derive(Clone)]
 pub struct SignalingHub {
     rooms: Arc<Mutex<HashMap<String, Room>>>,
+}
+
+impl Default for SignalingHub {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl SignalingHub {
@@ -244,12 +253,11 @@ impl SignalingHub {
                             PeerRole::Offerer => room.peer_b_tx.as_ref(),
                             PeerRole::Answerer => Some(&room.peer_a_tx),
                         };
-                        if let Some(tx) = other_tx {
-                            if tx.send(text).is_err() {
+                        if let Some(tx) = other_tx
+                            && tx.send(text).is_err() {
                                 log::debug!("[SignalingHub] Other peer disconnected");
                                 return Ok(());
                             }
-                        }
                     }
                 }
 
@@ -294,7 +302,7 @@ impl SignalingHub {
 
             // Remove room if both peers are gone
             let a_closed = room.peer_a_tx.is_closed();
-            let b_closed = room.peer_b_tx.as_ref().map_or(true, |tx| tx.is_closed());
+            let b_closed = room.peer_b_tx.as_ref().is_none_or(|tx| tx.is_closed());
 
             if a_closed && b_closed {
                 map.remove(room_name);

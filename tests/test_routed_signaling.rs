@@ -11,7 +11,9 @@
 
 mod common;
 
+#[cfg(not(target_arch = "wasm32"))]
 use common::TEST_RELAY_ADDR;
+#[cfg(not(target_arch = "wasm32"))]
 use common::test_harness;
 
 #[cfg(not(target_arch = "wasm32"))]

@@ -58,7 +58,7 @@ pub async fn connect_p2p(
     {
         use crate::platform::rtc_browser::RtcBrowser;
         let rtc = RtcBrowser::connect(signaling_url, room, ice_servers).await?;
-        return Ok(Box::new(rtc) as Box<dyn Transport>);
+        Ok(Box::new(rtc) as Box<dyn Transport>)
     }
 
     // ── Native ───────────────────────────────────────────────────────────
@@ -66,7 +66,7 @@ pub async fn connect_p2p(
     {
         use crate::platform::rtc_native::RtcNative;
         let rtc = RtcNative::connect(signaling_url, room, ice_servers).await?;
-        return Ok(Box::new(rtc) as Box<dyn Transport>);
+        Ok(Box::new(rtc) as Box<dyn Transport>)
     }
 
     // ── WASI ─────────────────────────────────────────────────────────────
@@ -74,6 +74,6 @@ pub async fn connect_p2p(
     {
         use crate::platform::rtc_wasi::RtcWasi;
         let rtc = RtcWasi::connect(signaling_url, room, ice_servers).await?;
-        return Ok(Box::new(rtc) as Box<dyn Transport>);
+        Ok(Box::new(rtc) as Box<dyn Transport>)
     }
 }

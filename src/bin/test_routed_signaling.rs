@@ -20,11 +20,10 @@
 //   cargo run --bin test_routed_signaling
 
 #[cfg(not(target_arch = "wasm32"))]
-use ego_transport::platform::server::{AutoDetectListener, Listener, ServerBuilder};
+use ego_transport::platform::server::{AutoDetectListener, Listener};
 #[cfg(not(target_arch = "wasm32"))]
 use ego_transport::transport::rtc_signaling::*;
 #[cfg(not(target_arch = "wasm32"))]
-use ego_transport::transport::{Transport, TransportError};
 #[cfg(not(target_arch = "wasm32"))]
 use std::time::Duration;
 
@@ -220,7 +219,7 @@ async fn run_peer_c(relay_addr: String) -> bool {
 
     // Wait for offer
     let mut got_offer = false;
-    let mut got_ice_done = false;
+    let mut _got_ice_done = false;
 
     log::info!("[C] Entering recv loop, waiting for offer...");
 
@@ -237,7 +236,7 @@ async fn run_peer_c(relay_addr: String) -> bool {
                 }
                 SignalingKind::IceDone => {
                     log::info!("[C] ✓ Received ICE done");
-                    got_ice_done = true;
+                    _got_ice_done = true;
                     if got_offer {
                         break;
                     }

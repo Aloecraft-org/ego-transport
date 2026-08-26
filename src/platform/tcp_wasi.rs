@@ -1,19 +1,17 @@
-use crate::transport::{Transport, TransportError};
-
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
-use wasip2::io::poll::{Pollable, poll};
+use crate::transport::{Transport, TransportError};
+#[cfg(all(target_arch = "wasm32", target_env = "p2"))]
+use async_trait::async_trait;
+#[cfg(all(target_arch = "wasm32", target_env = "p2"))]
+use std::time::Duration;
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
 use wasip2::io::streams::{InputStream, OutputStream, StreamError};
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
 use wasip2::sockets::instance_network::instance_network;
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
-use wasip2::sockets::network::IpAddressFamily;
-#[cfg(all(target_arch = "wasm32", target_env = "p2"))]
 use wasip2::sockets::network::{IpSocketAddress, Ipv4SocketAddress, Ipv6SocketAddress};
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
 use wasip2::sockets::tcp::TcpSocket;
-
-use std::time::Duration;
 
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
 pub struct TcpStreamWasi {
@@ -31,8 +29,6 @@ pub struct TcpListenerWasi {
 impl TcpStreamWasi {
     /// Get the remote peer address
     pub fn peer_addr(&self) -> Option<String> {
-        use wasip2::sockets::tcp::TcpSocket;
-
         // WASI P2 provides remote_address() on the socket
         match self.inner.remote_address() {
             Ok(addr) => {
@@ -189,8 +185,12 @@ fn parse_ipv4(ip_str: &str) -> Result<(u8, u8, u8, u8), TransportError> {
     Ok((octets[0], octets[1], octets[2], octets[3]))
 }
 
+/// The eight 16-bit segments of an IPv6 address.
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
-fn parse_ipv6(ip_str: &str) -> Result<(u16, u16, u16, u16, u16, u16, u16, u16), TransportError> {
+type Ipv6Segments = (u16, u16, u16, u16, u16, u16, u16, u16);
+
+#[cfg(all(target_arch = "wasm32", target_env = "p2"))]
+fn parse_ipv6(ip_str: &str) -> Result<Ipv6Segments, TransportError> {
     // Simplified IPv6 parser - only handles full addresses for now
     let parts: Vec<&str> = ip_str.split(':').collect();
     if parts.len() != 8 {
@@ -210,8 +210,6 @@ fn parse_ipv6(ip_str: &str) -> Result<(u16, u16, u16, u16, u16, u16, u16, u16), 
         hextets[7],
     ))
 }
-
-use async_trait::async_trait;
 
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
 #[async_trait]
@@ -427,7 +425,6 @@ impl TcpListenerWasi {
                 }
                 Err(e) => match e {
                     wasip2::sockets::network::ErrorCode::WouldBlock => {
-                        use crate::platform;
                         ego_platform::sleep(Duration::from_millis(10)).await;
                         continue;
                     }

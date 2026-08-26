@@ -57,35 +57,33 @@ impl Read for WasiSyncStream {
         }
 
         // Prefix fully drained — read directly from the inner WASI stream.
-        loop {
-            match self.inner.input.read(buf.len() as u64) {
-                Ok(data) => {
-                    if data.is_empty() {
-                        return Err(io::Error::new(
-                            io::ErrorKind::WouldBlock,
-                            "No data available",
-                        ));
-                    }
-                    let n = data.len().min(buf.len());
-                    buf[..n].copy_from_slice(&data[..n]);
-                    return Ok(n);
+        match self.inner.input.read(buf.len() as u64) {
+            Ok(data) => {
+                if data.is_empty() {
+                    return Err(io::Error::new(
+                        io::ErrorKind::WouldBlock,
+                        "No data available",
+                    ));
                 }
-                Err(e) => {
-                    use wasip2::io::streams::StreamError;
-                    match e {
-                        StreamError::Closed => {
-                            return Ok(0); // EOF
-                        }
-                        StreamError::LastOperationFailed(err) => {
-                            let error_str = err.to_debug_string();
-                            if error_str.contains("would-block") {
-                                return Err(io::Error::new(io::ErrorKind::WouldBlock, error_str));
-                            } else {
-                                return Err(io::Error::new(
-                                    io::ErrorKind::Other,
-                                    format!("WASI stream error: {}", error_str),
-                                ));
-                            }
+                let n = data.len().min(buf.len());
+                buf[..n].copy_from_slice(&data[..n]);
+                Ok(n)
+            }
+            Err(e) => {
+                use wasip2::io::streams::StreamError;
+                match e {
+                    StreamError::Closed => {
+                        Ok(0) // EOF
+                    }
+                    StreamError::LastOperationFailed(err) => {
+                        let error_str = err.to_debug_string();
+                        if error_str.contains("would-block") {
+                            Err(io::Error::new(io::ErrorKind::WouldBlock, error_str))
+                        } else {
+                            Err(io::Error::other(format!(
+                                "WASI stream error: {}",
+                                error_str
+                            )))
                         }
                     }
                 }
@@ -114,10 +112,10 @@ impl Write for WasiSyncStream {
                                 std::thread::yield_now();
                                 continue;
                             } else {
-                                return Err(io::Error::new(
-                                    io::ErrorKind::Other,
-                                    format!("WASI stream error: {}", error_str),
-                                ));
+                                return Err(io::Error::other(format!(
+                                    "WASI stream error: {}",
+                                    error_str
+                                )));
                             }
                         }
                     }

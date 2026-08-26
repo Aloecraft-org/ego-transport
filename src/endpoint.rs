@@ -71,14 +71,11 @@ impl Scheme {
 
     /// What this scheme can do on the current platform.
     pub const fn support(self) -> SchemeSupport {
-        const NO_BROWSER_SOCKETS: &str = "the browser sandbox has no raw sockets";
-        const NO_BROWSER_LISTEN: &str = "browsers cannot accept incoming connections";
-        const DIAL_SIDE: &str = "wssd is the listen-side scheme; dial with wssc";
-        const LISTEN_SIDE: &str = "wssc is the dial-side scheme; listen with wssd";
-        const PEER_SCHEME: &str = "webrtc is peer-to-peer; both sides dial through signaling";
-
         #[cfg(not(target_arch = "wasm32"))]
         {
+            const DIAL_SIDE: &str = "wssd is the listen-side scheme; dial with wssc";
+            const LISTEN_SIDE: &str = "wssc is the dial-side scheme; listen with wssd";
+            const PEER_SCHEME: &str = "webrtc is peer-to-peer; both sides dial through signaling";
             match self {
                 Scheme::Tcp => SchemeSupport::both(),
                 Scheme::Wssc => SchemeSupport::dial_only(LISTEN_SIDE),
@@ -89,6 +86,8 @@ impl Scheme {
         }
         #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
         {
+            const DIAL_SIDE: &str = "wssd is the listen-side scheme; dial with wssc";
+            const LISTEN_SIDE: &str = "wssc is the dial-side scheme; listen with wssd";
             const LATER: &str = "not yet implemented on wasm32-wasip2";
             match self {
                 Scheme::Tcp => SchemeSupport::both(),
@@ -100,6 +99,9 @@ impl Scheme {
         }
         #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
         {
+            const NO_BROWSER_SOCKETS: &str = "the browser sandbox has no raw sockets";
+            const NO_BROWSER_LISTEN: &str = "browsers cannot accept incoming connections";
+            const DIAL_SIDE: &str = "wssd is the listen-side scheme; dial with wssc";
             match self {
                 Scheme::Tcp => SchemeSupport::none(NO_BROWSER_SOCKETS, NO_BROWSER_LISTEN),
                 Scheme::Wssc => SchemeSupport::dial_only(NO_BROWSER_LISTEN),
@@ -164,6 +166,9 @@ pub struct SchemeSupport {
     pub listen: Availability,
 }
 
+// Which constructors are used depends on the target's arm of the support
+// table, so each platform sees a different subset as "dead".
+#[allow(dead_code)]
 impl SchemeSupport {
     const fn both() -> Self {
         Self {
@@ -187,7 +192,6 @@ impl SchemeSupport {
             listen: Availability::Available,
         }
     }
-    #[allow(dead_code)] // used by the non-native cfg arms of the support table
     const fn none(dial_reason: &'static str, listen_reason: &'static str) -> Self {
         Self {
             dial: Availability::Unavailable {

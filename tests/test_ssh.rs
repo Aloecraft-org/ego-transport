@@ -69,11 +69,8 @@ async fn subsystem_frames_round_trip_and_principal_is_surfaced() {
 
         // Echo framed messages until the peer hangs up.
         let mut framed = FramedTransport::new(channel);
-        loop {
-            match framed.recv_frame().await {
-                Ok(frame) => framed.send_frame(&frame).await.unwrap(),
-                Err(_) => break,
-            }
+        while let Ok(frame) = framed.recv_frame().await {
+            framed.send_frame(&frame).await.unwrap();
         }
     });
 

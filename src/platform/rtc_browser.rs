@@ -83,6 +83,15 @@ const DATA_CHANNEL_LABEL: &str = "aloecraft";
 /// Created via `RtcBrowser::connect()`, which handles the full signaling
 /// handshake. Once connected, `send()` and `recv()` operate over the direct
 /// P2P data channel.
+/// The message/open/close callback closures for a data channel, kept alive
+/// for the lifetime of the connection.
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+type DataChannelCallbacks = (
+    Closure<dyn FnMut(MessageEvent)>,
+    Closure<dyn FnMut(JsValue)>,
+    Closure<dyn FnMut(JsValue)>,
+);
+
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 pub struct RtcBrowser {
     /// The underlying RTCPeerConnection. Kept alive for the duration of the
@@ -199,8 +208,8 @@ impl RtcBrowser {
 
         if role == PeerRole::Offerer {
             // Offerer creates the data channel
-            let mut dc_init = RtcDataChannelInit::new();
-            dc_init.ordered(true);
+            let dc_init = RtcDataChannelInit::new();
+            dc_init.set_ordered(true);
 
             dc = pc.create_data_channel_with_data_channel_dict(DATA_CHANNEL_LABEL, &dc_init);
             log::info!(
@@ -227,15 +236,8 @@ impl RtcBrowser {
             // We need to store the callback closures somewhere they won't be dropped.
             // Since the data channel callbacks are set inside ondatachannel, we use
             // Rc<RefCell> to extract them.
-            let callback_holder: Rc<
-                RefCell<
-                    Option<(
-                        Closure<dyn FnMut(MessageEvent)>,
-                        Closure<dyn FnMut(JsValue)>,
-                        Closure<dyn FnMut(JsValue)>,
-                    )>,
-                >,
-            > = Rc::new(RefCell::new(None));
+            let callback_holder: Rc<RefCell<Option<DataChannelCallbacks>>> =
+                Rc::new(RefCell::new(None));
             let callback_holder_clone = callback_holder.clone();
 
             let on_dc_event = Closure::wrap(Box::new(move |event: RtcDataChannelEvent| {
@@ -439,8 +441,8 @@ async fn exchange_signaling_offerer(
 
     log::info!("[RTC Browser] Created offer ({} bytes)", offer_sdp.len());
 
-    let mut offer_desc = RtcSessionDescriptionInit::new(RtcSdpType::Offer);
-    offer_desc.sdp(&offer_sdp);
+    let offer_desc = RtcSessionDescriptionInit::new(RtcSdpType::Offer);
+    offer_desc.set_sdp(&offer_sdp);
 
     wasm_bindgen_futures::JsFuture::from(pc.set_local_description(&offer_desc))
         .await
@@ -473,8 +475,8 @@ async fn exchange_signaling_offerer(
                     msg.payload.len()
                 );
 
-                let mut answer_desc = RtcSessionDescriptionInit::new(RtcSdpType::Answer);
-                answer_desc.sdp(&msg.payload);
+                let answer_desc = RtcSessionDescriptionInit::new(RtcSdpType::Answer);
+                answer_desc.set_sdp(&msg.payload);
 
                 wasm_bindgen_futures::JsFuture::from(pc.set_remote_description(&answer_desc))
                     .await
@@ -532,8 +534,9 @@ async fn exchange_signaling_answerer(
     room: &str,
     ice_rx: &mut mpsc::UnboundedReceiver<IceCandidate>,
 ) -> Result<(), TransportError> {
-    // Wait for offer
-    let mut got_offer = false;
+    // Wait for offer. The offer arm breaks out of the loop, so any ICE
+    // candidate seen inside it always precedes the offer and is buffered.
+    let got_offer = false;
     let mut pending_ice: Vec<IceCandidate> = Vec::new();
 
     loop {
@@ -542,8 +545,8 @@ async fn exchange_signaling_answerer(
             SignalingKind::Offer => {
                 log::info!("[RTC Browser] Received offer ({} bytes)", msg.payload.len());
 
-                let mut offer_desc = RtcSessionDescriptionInit::new(RtcSdpType::Offer);
-                offer_desc.sdp(&msg.payload);
+                let offer_desc = RtcSessionDescriptionInit::new(RtcSdpType::Offer);
+                offer_desc.set_sdp(&msg.payload);
 
                 wasm_bindgen_futures::JsFuture::from(pc.set_remote_description(&offer_desc))
                     .await
@@ -556,7 +559,6 @@ async fn exchange_signaling_answerer(
                     add_ice_candidate(pc, &ice).await?;
                 }
 
-                got_offer = true;
                 break;
             }
             SignalingKind::Ice => {
@@ -595,8 +597,8 @@ async fn exchange_signaling_answerer(
 
     log::info!("[RTC Browser] Created answer ({} bytes)", answer_sdp.len());
 
-    let mut answer_desc = RtcSessionDescriptionInit::new(RtcSdpType::Answer);
-    answer_desc.sdp(&answer_sdp);
+    let answer_desc = RtcSessionDescriptionInit::new(RtcSdpType::Answer);
+    answer_desc.set_sdp(&answer_sdp);
 
     wasm_bindgen_futures::JsFuture::from(pc.set_local_description(&answer_desc))
         .await
@@ -716,9 +718,9 @@ async fn add_ice_candidate(
     pc: &RtcPeerConnection,
     ice: &IceCandidate,
 ) -> Result<(), TransportError> {
-    let mut init = RtcIceCandidateInit::new(&ice.candidate);
-    init.sdp_mid(Some(&ice.sdp_mid));
-    init.sdp_m_line_index(Some(ice.sdp_mline_index));
+    let init = RtcIceCandidateInit::new(&ice.candidate);
+    init.set_sdp_mid(Some(&ice.sdp_mid));
+    init.set_sdp_m_line_index(Some(ice.sdp_mline_index));
 
     let candidate = RtcIceCandidate::new(&init)
         .map_err(|e| TransportError::Protocol(format!("Invalid ICE candidate: {:?}", e)))?;
@@ -743,11 +745,7 @@ fn wire_data_channel_callbacks(
     data_tx: &mpsc::UnboundedSender<Vec<u8>>,
     closed: &Rc<RefCell<bool>>,
     ready: &Rc<RefCell<bool>>,
-) -> (
-    Closure<dyn FnMut(MessageEvent)>,
-    Closure<dyn FnMut(JsValue)>,
-    Closure<dyn FnMut(JsValue)>,
-) {
+) -> DataChannelCallbacks {
     // Set binary type
     dc.set_binary_type(web_sys::RtcDataChannelType::Arraybuffer);
 

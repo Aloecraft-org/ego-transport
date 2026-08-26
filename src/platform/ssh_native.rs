@@ -410,14 +410,16 @@ impl SshListener {
     pub async fn bind(addr: &str, config: SshServerConfig) -> Result<Self, TransportError> {
         let host_identity = key_identity(&config.host_key.public_key().clone());
 
-        let mut russh_config = russh::server::Config::default();
-        russh_config.methods = russh::MethodSet::empty();
-        russh_config.methods.push(russh::MethodKind::PublicKey);
-        russh_config.keys = vec![config.host_key];
-        russh_config.preferred = modern_preferred();
-        russh_config.inactivity_timeout = config.inactivity_timeout;
-        russh_config.auth_rejection_time = config.auth_rejection_time;
-        let russh_config = Arc::new(russh_config);
+        let mut methods = russh::MethodSet::empty();
+        methods.push(russh::MethodKind::PublicKey);
+        let russh_config = Arc::new(russh::server::Config {
+            methods,
+            keys: vec![config.host_key],
+            preferred: modern_preferred(),
+            inactivity_timeout: config.inactivity_timeout,
+            auth_rejection_time: config.auth_rejection_time,
+            ..Default::default()
+        });
 
         let tcp = tokio::net::TcpListener::bind(addr)
             .await
@@ -735,7 +737,7 @@ impl HostKeyVerification {
             HostKeyVerification::Keys(keys) => keys.iter().any(|k| k.key_data() == key.key_data()),
             HostKeyVerification::Fingerprints(fps) => {
                 let fp = key.fingerprint(HashAlg::Sha256).to_string();
-                fps.iter().any(|f| *f == fp)
+                fps.contains(&fp)
             }
         }
     }
@@ -791,10 +793,11 @@ impl SshClientConnection {
     /// error: [`SshError::HostKeyMismatch`] names the key the server offered,
     /// [`SshError::AuthRejected`] names the refused user.
     pub async fn connect(addr: &str, config: SshClientConfig) -> Result<Self, TransportError> {
-        let mut russh_config = russh::client::Config::default();
-        russh_config.preferred = modern_preferred();
-        russh_config.inactivity_timeout = config.inactivity_timeout;
-        let russh_config = Arc::new(russh_config);
+        let russh_config = Arc::new(russh::client::Config {
+            preferred: modern_preferred(),
+            inactivity_timeout: config.inactivity_timeout,
+            ..Default::default()
+        });
 
         let observed = Arc::new(std::sync::Mutex::new(None));
         let handler = ClientHandler {

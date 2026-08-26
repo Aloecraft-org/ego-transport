@@ -15,8 +15,10 @@
 
 mod common;
 
+#[cfg(not(target_arch = "wasm32"))]
 use common::test_harness;
 
+#[cfg(not(target_arch = "wasm32"))]
 const SIGNALING_HUB_ADDR: &str = "127.0.0.1:19986";
 
 /// Helper: connect one peer, spawn its actor, give it time to send JOIN,

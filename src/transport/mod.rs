@@ -3,8 +3,8 @@ mod buffered;
 pub mod p2p;
 pub mod rtc_signaling;
 pub mod signaling_hub;
-mod tcp;
-mod websocket;
+pub mod tcp;
+pub mod websocket;
 pub use bridge::TransportBridge;
 pub use p2p::connect_p2p;
 #[derive(Debug)]
@@ -132,7 +132,7 @@ pub async fn connect(addr: &str) -> Result<Box<dyn Transport>, TransportError> {
             let ws = WebSocketNative::connect(addr)
                 .await
                 .map_err(|e| TransportError::WebSocket(format!("{:?}", e)))?;
-            return Ok(Box::new(ws) as Box<dyn Transport>);
+            Ok(Box::new(ws) as Box<dyn Transport>)
         }
 
         #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
@@ -141,7 +141,7 @@ pub async fn connect(addr: &str) -> Result<Box<dyn Transport>, TransportError> {
             let ws = WebSocketWasi::connect(addr)
                 .await
                 .map_err(|e| TransportError::WebSocket(format!("{:?}", e)))?;
-            return Ok(Box::new(ws) as Box<dyn Transport>);
+            Ok(Box::new(ws) as Box<dyn Transport>)
         }
 
         #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
@@ -150,21 +150,21 @@ pub async fn connect(addr: &str) -> Result<Box<dyn Transport>, TransportError> {
             let ws = WebSocketBrowser::connect(addr)
                 .await
                 .map_err(|e| TransportError::WebSocket(format!("{:?}", e)))?;
-            return Ok(Box::new(ws) as Box<dyn Transport>);
+            Ok(Box::new(ws) as Box<dyn Transport>)
         }
     } else {
         #[cfg(not(target_arch = "wasm32"))]
         {
             use crate::platform::tcp_native::TcpStreamNative;
             let tcp = TcpStreamNative::connect(addr).await?;
-            return Ok(Box::new(tcp) as Box<dyn Transport>);
+            Ok(Box::new(tcp) as Box<dyn Transport>)
         }
 
         #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
         {
             use crate::platform::tcp_wasi::TcpStreamWasi;
             let tcp = TcpStreamWasi::connect(addr).await?;
-            return Ok(Box::new(tcp) as Box<dyn Transport>);
+            Ok(Box::new(tcp) as Box<dyn Transport>)
         }
 
         // TCP (not available on browser)
