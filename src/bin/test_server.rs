@@ -1,14 +1,20 @@
 // bin/test_server.rs
-use ego_transport::platform;
+
+#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 use ego_transport::platform::server::ServerBuilder;
+#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+#[cfg(not(target_arch = "wasm32"))]
 use ego_transport::transport::Transport;
+#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+#[cfg(not(target_arch = "wasm32"))]
 use std::time::Duration;
 
 #[cfg(not(target_arch = "wasm32"))]
 use ego_transport::platform::tcp_native::{TcpListenerNative, TcpStreamNative};
 
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
-use ego_transport::platform::tcp_wasi::{TcpListenerWasi, TcpStreamWasi};
+use ego_transport::platform::tcp_wasi::TcpStreamWasi;
 
 // ===== NATIVE =====
 #[cfg(not(target_arch = "wasm32"))]
@@ -87,25 +93,20 @@ async fn run_native_server(addr: &str) {
             let mut buf = [0u8; 1024];
             let mut msg_count = 0;
 
-            loop {
-                match transport.recv(&mut buf).await {
-                    Ok(n) => {
-                        msg_count += 1;
-                        let data = String::from_utf8_lossy(&buf[..n]);
-                        log::info!("[Server] ✓ Received: {}", data);
+            while let Ok(n) = transport.recv(&mut buf).await {
+                msg_count += 1;
+                let data = String::from_utf8_lossy(&buf[..n]);
+                log::info!("[Server] ✓ Received: {}", data);
 
-                        // Echo back
-                        if let Err(e) = transport.send(&buf[..n]).await {
-                            log::error!("[Server] ✗ Send error: {:?}", e);
-                            break;
-                        }
+                // Echo back
+                if let Err(e) = transport.send(&buf[..n]).await {
+                    log::error!("[Server] ✗ Send error: {:?}", e);
+                    break;
+                }
 
-                        // Exit after 2 messages per connection
-                        if msg_count >= 2 {
-                            break;
-                        }
-                    }
-                    Err(_) => break,
+                // Exit after 2 messages per connection
+                if msg_count >= 2 {
+                    break;
                 }
             }
 
@@ -181,25 +182,20 @@ async fn run_wasi() {
             let mut buf = [0u8; 1024];
             let mut msg_count = 0;
 
-            loop {
-                match transport.recv(&mut buf).await {
-                    Ok(n) => {
-                        msg_count += 1;
-                        let data = String::from_utf8_lossy(&buf[..n]);
-                        log::info!("[WASI Server] ✓ Received: {}", data);
+            while let Ok(n) = transport.recv(&mut buf).await {
+                msg_count += 1;
+                let data = String::from_utf8_lossy(&buf[..n]);
+                log::info!("[WASI Server] ✓ Received: {}", data);
 
-                        // Echo back
-                        if let Err(e) = transport.send(&buf[..n]).await {
-                            log::error!("[WASI Server] ✗ Send error: {:?}", e);
-                            break;
-                        }
+                // Echo back
+                if let Err(e) = transport.send(&buf[..n]).await {
+                    log::error!("[WASI Server] ✗ Send error: {:?}", e);
+                    break;
+                }
 
-                        // Exit after 2 messages
-                        if msg_count >= 2 {
-                            break;
-                        }
-                    }
-                    Err(_) => break,
+                // Exit after 2 messages
+                if msg_count >= 2 {
+                    break;
                 }
             }
 

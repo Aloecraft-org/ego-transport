@@ -1,13 +1,16 @@
 #[cfg(not(target_arch = "wasm32"))]
 use crate::platform;
+#[cfg(not(target_arch = "wasm32"))]
 use crate::transport::{Transport, TransportError};
+#[cfg(not(target_arch = "wasm32"))]
+use async_trait::async_trait;
+#[cfg(not(target_arch = "wasm32"))]
+use std::io::{ErrorKind, Read, Write};
+#[cfg(not(target_arch = "wasm32"))]
+use std::net::TcpStream;
 
 #[cfg(not(target_arch = "wasm32"))]
 use crate::platform::ws_native::WebSocketNative;
-
-use std::io::{ErrorKind, Read, Write};
-use std::net::TcpStream;
-use std::time::Duration;
 
 #[cfg(not(target_arch = "wasm32"))]
 pub struct TcpStreamNative {
@@ -41,8 +44,6 @@ impl TcpStreamNative {
         Ok(Self { inner: stream })
     }
 }
-
-use async_trait::async_trait;
 
 #[cfg(not(target_arch = "wasm32"))]
 #[async_trait]

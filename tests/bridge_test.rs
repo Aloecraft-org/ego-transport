@@ -1,7 +1,7 @@
 // tests/bridge_test.rs
 
 mod common;
-use common::{async_test, test};
+use common::async_test;
 
 use ego_transport::transport::{Transport, TransportBridge};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};

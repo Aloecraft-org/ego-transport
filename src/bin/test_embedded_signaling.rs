@@ -20,15 +20,15 @@ use ego_transport::platform::tcp_native::TcpStreamNative;
 #[cfg(not(target_arch = "wasm32"))]
 use ego_transport::platform::ws_native::WebSocketNative;
 #[cfg(not(target_arch = "wasm32"))]
+use ego_transport::transport::Transport;
+#[cfg(not(target_arch = "wasm32"))]
 use ego_transport::transport::rtc_signaling::*;
 #[cfg(not(target_arch = "wasm32"))]
 use ego_transport::transport::signaling_hub::SignalingHub;
 #[cfg(not(target_arch = "wasm32"))]
-use ego_transport::transport::Transport;
+use std::sync::Arc;
 #[cfg(not(target_arch = "wasm32"))]
 use std::sync::atomic::{AtomicU32, Ordering};
-#[cfg(not(target_arch = "wasm32"))]
-use std::sync::Arc;
 #[cfg(not(target_arch = "wasm32"))]
 use std::time::Duration;
 
@@ -60,15 +60,10 @@ async fn main() {
                     count.fetch_add(1, Ordering::SeqCst);
                     log::info!("[Echo] App connection received");
                     let mut buf = [0u8; 1024];
-                    loop {
-                        match transport.recv(&mut buf).await {
-                            Ok(n) => {
-                                let data = String::from_utf8_lossy(&buf[..n]);
-                                log::info!("[Echo] Received: {}", data);
-                                transport.send(&buf[..n]).await.ok();
-                            }
-                            Err(_) => break,
-                        }
+                    while let Ok(n) = transport.recv(&mut buf).await {
+                        let data = String::from_utf8_lossy(&buf[..n]);
+                        log::info!("[Echo] Received: {}", data);
+                        transport.send(&buf[..n]).await.ok();
                     }
                 }
             })
@@ -192,7 +187,11 @@ async fn run_signaling_peer(addr: &str, room: &str, name: &str) -> bool {
                 .send_message(&mut transport, &SignalingMessage::offer(room, &sdp))
                 .await
                 .ok();
-            let ice = IceCandidate::new("candidate:1 1 udp 2130706431 10.0.0.1 5000 typ host", "0", 0);
+            let ice = IceCandidate::new(
+                "candidate:1 1 udp 2130706431 10.0.0.1 5000 typ host",
+                "0",
+                0,
+            );
             client
                 .send_message(&mut transport, &SignalingMessage::ice(room, &ice))
                 .await
@@ -211,10 +210,8 @@ async fn run_signaling_peer(addr: &str, room: &str, name: &str) -> bool {
                             log::info!("[{}] ✓ Received answer", name);
                             got_answer = true;
                         }
-                        SignalingKind::IceDone => {
-                            if got_answer {
-                                break;
-                            }
+                        SignalingKind::IceDone if got_answer => {
+                            break;
                         }
                         _ => {}
                     },
@@ -233,10 +230,8 @@ async fn run_signaling_peer(addr: &str, room: &str, name: &str) -> bool {
                             log::info!("[{}] ✓ Received offer", name);
                             got_offer = true;
                         }
-                        SignalingKind::IceDone => {
-                            if got_offer {
-                                break;
-                            }
+                        SignalingKind::IceDone if got_offer => {
+                            break;
                         }
                         _ => {}
                     },

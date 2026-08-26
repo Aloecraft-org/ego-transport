@@ -6,8 +6,6 @@
 //   2. A ws_only server rejects raw TCP connections.
 
 #[cfg(not(target_arch = "wasm32"))]
-use ego_transport::platform;
-#[cfg(not(target_arch = "wasm32"))]
 use ego_transport::platform::server::{AutoDetectListener, ServerBuilder};
 #[cfg(not(target_arch = "wasm32"))]
 use ego_transport::platform::tcp_native::TcpStreamNative;
@@ -98,23 +96,18 @@ async fn run_echo_server(addr: &str) {
             let mut buf = [0u8; 1024];
             let mut msg_count = 0;
 
-            loop {
-                match transport.recv(&mut buf).await {
-                    Ok(n) => {
-                        msg_count += 1;
-                        let data = String::from_utf8_lossy(&buf[..n]);
-                        log::info!("[Echo Server] ✓ Received: {}", data);
+            while let Ok(n) = transport.recv(&mut buf).await {
+                msg_count += 1;
+                let data = String::from_utf8_lossy(&buf[..n]);
+                log::info!("[Echo Server] ✓ Received: {}", data);
 
-                        if let Err(e) = transport.send(&buf[..n]).await {
-                            log::error!("[Echo Server] ✗ Send error: {:?}", e);
-                            break;
-                        }
+                if let Err(e) = transport.send(&buf[..n]).await {
+                    log::error!("[Echo Server] ✗ Send error: {:?}", e);
+                    break;
+                }
 
-                        if msg_count >= 2 {
-                            break;
-                        }
-                    }
-                    Err(_) => break,
+                if msg_count >= 2 {
+                    break;
                 }
             }
 
@@ -256,9 +249,10 @@ async fn run_rejected_tcp_client(addr: &str) -> bool {
 
     // Send raw TCP data — this triggers the server to peek, detect non-WS,
     // and drop the connection.
-    if let Err(_) = transport
+    if transport
         .send(b"This is raw TCP, not a WebSocket handshake")
         .await
+        .is_err()
     {
         log::info!("[Rejected TCP] ✓ Send failed (connection already closed)");
         return true;

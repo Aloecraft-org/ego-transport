@@ -5,11 +5,12 @@
 // 2. Prove recv() spins instantly (100 attempts take ~0ms).
 
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
+use ego_platform::Instant;
+#[cfg(all(target_arch = "wasm32", target_env = "p2"))]
 use ego_transport::platform::tcp_wasi::TcpListenerWasi;
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
 use ego_transport::transport::Transport;
-
-use ego_platform::Instant;
+#[cfg(all(target_arch = "wasm32", target_env = "p2"))]
 use std::time::Duration;
 
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]

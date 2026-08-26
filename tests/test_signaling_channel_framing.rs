@@ -19,10 +19,12 @@ async fn test_transport_signaling_channel_handles_coalesced_messages() {
     });
     ego_platform::sleep(std::time::Duration::from_millis(200)).await;
 
-    let sender_transport = ego_transport::transport::connect(relay_addr).await
+    let sender_transport = ego_transport::transport::connect(relay_addr)
+        .await
         .expect("sender connect failed");
     ego_platform::sleep(std::time::Duration::from_millis(100)).await;
-    let receiver_transport = ego_transport::transport::connect(relay_addr).await
+    let receiver_transport = ego_transport::transport::connect(relay_addr)
+        .await
         .expect("receiver connect failed");
 
     let mut sender = TransportSignalingChannel::new(sender_transport);
@@ -31,12 +33,23 @@ async fn test_transport_signaling_channel_handles_coalesced_messages() {
     // Send 3 messages rapidly — TCP will likely coalesce them
     let room = "framing-test";
     let sdp = SdpBuilder::new().build_offer();
-    sender.send_signal(&SignalingMessage::offer(room, &sdp)).await.unwrap();
+    sender
+        .send_signal(&SignalingMessage::offer(room, &sdp))
+        .await
+        .unwrap();
     let ice = IceCandidate::new(
-        "candidate:1 1 udp 2130706431 10.0.0.1 5000 typ host", "0", 0,
+        "candidate:1 1 udp 2130706431 10.0.0.1 5000 typ host",
+        "0",
+        0,
     );
-    sender.send_signal(&SignalingMessage::ice(room, &ice)).await.unwrap();
-    sender.send_signal(&SignalingMessage::ice_done(room)).await.unwrap();
+    sender
+        .send_signal(&SignalingMessage::ice(room, &ice))
+        .await
+        .unwrap();
+    sender
+        .send_signal(&SignalingMessage::ice_done(room))
+        .await
+        .unwrap();
 
     // Give the relay time to forward
     ego_platform::sleep(std::time::Duration::from_millis(200)).await;
@@ -44,10 +57,8 @@ async fn test_transport_signaling_channel_handles_coalesced_messages() {
     // Receive all 3
     let mut received = Vec::new();
     for _ in 0..3 {
-        match ego_platform::timeout(
-            std::time::Duration::from_secs(2),
-            receiver.recv_signal(),
-        ).await {
+        match ego_platform::timeout(std::time::Duration::from_secs(2), receiver.recv_signal()).await
+        {
             Ok(Ok(msg)) => received.push(msg.kind),
             Ok(Err(e)) => {
                 log::error!("recv error: {:?}", e);
@@ -62,7 +73,11 @@ async fn test_transport_signaling_channel_handles_coalesced_messages() {
 
     log::info!("Received {}/3 messages: {:?}", received.len(), received);
 
-    assert_eq!(received.len(), 3, "TransportSignalingChannel should receive all 3 coalesced messages");
+    assert_eq!(
+        received.len(),
+        3,
+        "TransportSignalingChannel should receive all 3 coalesced messages"
+    );
     assert_eq!(received[0], SignalingKind::Offer);
     assert_eq!(received[1], SignalingKind::Ice);
     assert_eq!(received[2], SignalingKind::IceDone);

@@ -1,5 +1,5 @@
 // bin/test_network.rs
-use ego_transport::platform;
+#[cfg(not(target_arch = "wasm32"))]
 use ego_transport::transport::{Transport, TransportError};
 use std::time::Duration;
 

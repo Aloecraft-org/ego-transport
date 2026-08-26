@@ -1,6 +1,4 @@
-use std::net::TcpStream;
-
-use crate::transport::{Transport, TransportError, TransportKind};
+use crate::transport::{Transport, TransportError};
 
 #[cfg(not(target_arch = "wasm32"))]
 use crate::platform::ws_native::WebSocketNative;

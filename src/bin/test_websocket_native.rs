@@ -2,8 +2,6 @@
 
 // Native implementation
 #[cfg(not(target_arch = "wasm32"))]
-use ego_transport::platform;
-#[cfg(not(target_arch = "wasm32"))]
 use ego_transport::platform::tcp_native::TcpListenerNative;
 #[cfg(not(target_arch = "wasm32"))]
 use ego_transport::platform::ws_native::WebSocketNative;

@@ -74,14 +74,8 @@ async fn main() {
         "\n=== P2P Connection Test {} ===",
         if a_ok && b_ok { "PASSED" } else { "FAILED" }
     );
-    log::info!(
-        "  Peer-A: {}",
-        if a_ok { "✓ PASS" } else { "✗ FAIL" }
-    );
-    log::info!(
-        "  Peer-B: {}",
-        if b_ok { "✓ PASS" } else { "✗ FAIL" }
-    );
+    log::info!("  Peer-A: {}", if a_ok { "✓ PASS" } else { "✗ FAIL" });
+    log::info!("  Peer-B: {}", if b_ok { "✓ PASS" } else { "✗ FAIL" });
 
     tokio::time::sleep(Duration::from_secs(1)).await;
 }
@@ -95,15 +89,14 @@ async fn run_peer(
 ) -> bool {
     log::info!("[{}] Connecting via connect_p2p...", name);
 
-    let mut transport = match ego_transport::transport::connect_p2p(signal_url, room, ice_servers)
-        .await
-    {
-        Ok(t) => t,
-        Err(e) => {
-            log::error!("[{}] ✗ connect_p2p failed: {:?}", name, e);
-            return false;
-        }
-    };
+    let mut transport =
+        match ego_transport::transport::connect_p2p(signal_url, room, ice_servers).await {
+            Ok(t) => t,
+            Err(e) => {
+                log::error!("[{}] ✗ connect_p2p failed: {:?}", name, e);
+                return false;
+            }
+        };
 
     log::info!("[{}] ✓ P2P connection established!", name);
 
@@ -195,7 +188,13 @@ async fn handle_server_peer(
             let ready_b = SignalingMessage::ready(&room_name, PeerRole::Answerer);
             transport.send(ready_b.serialize().as_bytes()).await?;
         } else {
-            map.insert(room_name.clone(), Room { peer_a_tx: my_tx, peer_b_tx: None });
+            map.insert(
+                room_name.clone(),
+                Room {
+                    peer_a_tx: my_tx,
+                    peer_b_tx: None,
+                },
+            );
             role = PeerRole::Offerer;
         }
     }

@@ -5,11 +5,10 @@
 // 2. Connection Timeout: Hardcoded loop limit kills idle connections.
 
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
-use ego_transport::platform::tcp_wasi::{TcpListenerWasi, TcpStreamWasi};
+use ego_transport::platform::tcp_wasi::TcpListenerWasi;
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
 use ego_transport::transport::Transport;
-
-use ego_platform::Instant;
+#[cfg(all(target_arch = "wasm32", target_env = "p2"))]
 use std::time::Duration;
 
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]

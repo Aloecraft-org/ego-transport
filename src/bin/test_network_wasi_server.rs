@@ -1,6 +1,9 @@
 // bin/test_network_wasi_server.rs
-use ego_transport::platform;
-use ego_transport::transport::{Transport, TransportError};
+#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+use ego_transport::transport::Transport;
+#[cfg(all(target_arch = "wasm32", target_env = "p2"))]
+use ego_transport::transport::TransportError;
+#[cfg(not(target_arch = "wasm32"))]
 use std::time::Duration;
 
 #[cfg(not(target_arch = "wasm32"))]

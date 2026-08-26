@@ -2,17 +2,12 @@
 
 // Native: Run server
 #[cfg(not(target_arch = "wasm32"))]
-use ego_transport::platform;
-#[cfg(not(target_arch = "wasm32"))]
 use ego_transport::platform::tcp_native::TcpListenerNative;
 #[cfg(not(target_arch = "wasm32"))]
 use ego_transport::transport::Transport;
-#[cfg(not(target_arch = "wasm32"))]
-use std::time::Duration;
 
 // WASI: Run client
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
-use ego_transport::platform;
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
 use ego_transport::platform::ws_wasi::WebSocketWasi;
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
