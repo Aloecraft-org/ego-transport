@@ -78,6 +78,11 @@ pub enum TransportError {
     /// STUN-specific failure (address discovery, NAT mapping detection).
     #[error(transparent)]
     Stun(#[from] crate::stun::StunError),
+
+    /// TURN-specific failure (relay allocation, credentials, quota).
+    #[cfg(not(target_arch = "wasm32"))]
+    #[error(transparent)]
+    Turn(#[from] crate::platform::turn_native::TurnError),
 }
 
 // For native and WASI: Use async_trait with Send

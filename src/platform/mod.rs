@@ -5,6 +5,8 @@ pub mod ssh_native;
 pub mod stun_native;
 pub mod tcp_native;
 pub mod tcp_wasi;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod turn_native;
 pub mod ws_browser;
 pub mod ws_native;
 pub mod ws_wasi;

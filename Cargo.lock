@@ -1061,6 +1061,7 @@ dependencies = [
  "tokio",
  "tokio-tungstenite",
  "tungstenite",
+ "turn",
  "uuid",
  "wasip2",
  "wasm-bindgen",
@@ -1068,6 +1069,7 @@ dependencies = [
  "wasm-bindgen-test",
  "web-sys",
  "webrtc",
+ "webrtc-util",
 ]
 
 [[package]]

@@ -34,6 +34,11 @@ webrtc = "0.17"
 bytes = "1"
 russh = "0.63"
 rand = { version = "0.10", features = ["thread_rng"] }
+# TURN relay. The protocol has HMAC auth, allocation lifecycles, permissions
+# and channel framing — stateful machinery where a bug means an open relay —
+# so it comes from the maintained implementation, not from scratch.
+turn = { version = "0.17", features = ["metrics"] }
+webrtc-util = "0.17"
 
 # === WASI P2 only ===
 [target.'cfg(all(target_arch = "wasm32", target_env = "p2"))'.dependencies]
@@ -75,3 +80,9 @@ uuid = "1"
 
 [target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dev-dependencies]
 wasm-bindgen-test = "0.3"
+
+# A real TURN client, so the relay server is tested against an independent
+# implementation of the protocol rather than against itself.
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+turn = "0.17"
+webrtc-util = "0.17"

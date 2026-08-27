@@ -15,6 +15,11 @@ pub use stun::{MappingReport, NatMapping, ProbeConfig, StunError, StunProbe};
 #[cfg(not(target_arch = "wasm32"))]
 pub use platform::ssh_native as ssh;
 
+/// The TURN relay. Native only: a browser cannot run a relay server, and its
+/// ICE stack consumes one through `IceServerConfig` instead.
+#[cfg(not(target_arch = "wasm32"))]
+pub use platform::turn_native as turn;
+
 #[cfg(not(target_arch = "wasm32"))]
 pub use platform::ws_native::WebSocketNative;
 
