@@ -16,7 +16,8 @@ use std::time::Duration;
 
 use ego_transport::transport::rtc_signaling::IceServerConfig;
 use ego_transport::turn::{
-    TurnCredentials, TurnError, TurnServer, TurnServerConfig, ephemeral_credentials,
+    ClosedAllocation, TurnCredentials, TurnError, TurnServer, TurnServerConfig,
+    credential_principal, ephemeral_credentials, ephemeral_credentials_for,
 };
 use tokio::net::UdpSocket;
 use turn::client::{Client, ClientConfig};
@@ -34,6 +35,7 @@ fn config(credentials: TurnCredentials) -> TurnServerConfig {
         credentials,
         max_allocations: 8,
         channel_bind_timeout: Duration::from_secs(60),
+        on_allocation_closed: None,
     }
 }
 
@@ -357,6 +359,242 @@ async fn revoking_a_principal_drops_its_allocations() {
     assert!(released, "revocation did not release the allocation slot");
     assert!(server.allocations().await.unwrap().is_empty());
     assert_eq!(metrics.snapshot().allocations_closed, 1);
+
+    client.close().await.ok();
+    server.close().await.unwrap();
+}
+
+// ---------------------------------------------------------------------------
+// Credential format interop
+// ---------------------------------------------------------------------------
+
+/// Mint a credential the way coturn's `use-auth-secret` convention does —
+/// `<expiry>:<user>`, HMAC-SHA1 over the whole username — without going
+/// through our own minting code, so this checks interoperability rather than
+/// self-consistency.
+fn coturn_style_credential(secret: &str, ttl_secs: u64, user: &str) -> (String, String) {
+    use base64::Engine;
+    let expiry = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+        + ttl_secs;
+    let username = format!("{expiry}:{user}");
+    let key = ring::hmac::Key::new(ring::hmac::HMAC_SHA1_FOR_LEGACY_USE_ONLY, secret.as_bytes());
+    let tag = ring::hmac::sign(&key, username.as_bytes());
+    let password = base64::engine::general_purpose::STANDARD.encode(tag.as_ref());
+    (username, password)
+}
+
+#[tokio::test]
+async fn coturn_style_usernames_with_a_principal_are_accepted() {
+    let secret = "shared-with-whoever-mints-credentials";
+    let server = TurnServer::bind(config(TurnCredentials::Ephemeral {
+        shared_secret: secret.to_string(),
+    }))
+    .await
+    .unwrap();
+
+    // Minted the coturn way by an independent implementation, not by ours.
+    let (username, password) = coturn_style_credential(secret, 300, "alice");
+    let client = turn_client(server.local_addr(), &username, &password)
+        .await
+        .unwrap();
+    client.allocate().await.unwrap();
+
+    // The principal rides along on the allocation, no re-parsing needed.
+    let allocations = server.allocations().await.unwrap();
+    assert_eq!(allocations.len(), 1);
+    assert_eq!(allocations[0].principal.as_deref(), Some("alice"));
+    assert_eq!(allocations[0].username, username);
+
+    client.close().await.unwrap();
+    server.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn both_username_forms_verify_against_one_server() {
+    let secret = "one-secret-two-username-shapes";
+    let server = TurnServer::bind(config(TurnCredentials::Ephemeral {
+        shared_secret: secret.to_string(),
+    }))
+    .await
+    .unwrap();
+    let metrics = server.metrics();
+
+    // The bare-expiry form, as implementations that only parse digits mint it.
+    let (bare_user, bare_pw) = ephemeral_credentials(secret, Duration::from_secs(300)).unwrap();
+    assert!(bare_user.parse::<u64>().is_ok(), "expected a bare expiry");
+    assert_eq!(credential_principal(&bare_user), None);
+    let bare = turn_client(server.local_addr(), &bare_user, &bare_pw)
+        .await
+        .unwrap();
+    bare.allocate().await.unwrap();
+
+    // The labelled form, which names its principal.
+    let (labelled_user, labelled_pw) =
+        ephemeral_credentials_for(secret, Duration::from_secs(300), "bob").unwrap();
+    assert_eq!(credential_principal(&labelled_user), Some("bob"));
+    let labelled = turn_client(server.local_addr(), &labelled_user, &labelled_pw)
+        .await
+        .unwrap();
+    labelled.allocate().await.unwrap();
+
+    assert_eq!(metrics.snapshot().allocations_granted, 2);
+
+    bare.close().await.unwrap();
+    labelled.close().await.unwrap();
+    server.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn expired_and_forged_credentials_are_refused_in_both_forms() {
+    let secret = "secret";
+    let server = TurnServer::bind(config(TurnCredentials::Ephemeral {
+        shared_secret: secret.to_string(),
+    }))
+    .await
+    .unwrap();
+    let metrics = server.metrics();
+
+    // Expired, labelled form: a valid HMAC over an expiry in the past.
+    let (expired_user, expired_pw) = coturn_style_credential_at(secret, -60, "alice");
+    let expired = turn_client(server.local_addr(), &expired_user, &expired_pw)
+        .await
+        .unwrap();
+    assert_allocation_refused(&expired).await;
+
+    // Unexpired but with someone else's HMAC.
+    let (user, _) = coturn_style_credential(secret, 300, "alice");
+    let (_, other_pw) = coturn_style_credential("a-different-secret", 300, "alice");
+    let forger = turn_client(server.local_addr(), &user, &other_pw)
+        .await
+        .unwrap();
+    assert_allocation_refused(&forger).await;
+
+    // A username with a principal but no parsable expiry.
+    let nonsense = turn_client(server.local_addr(), "soon:alice", "whatever")
+        .await
+        .unwrap();
+    assert_allocation_refused(&nonsense).await;
+
+    assert_eq!(metrics.snapshot().allocations_granted, 0);
+    assert!(metrics.snapshot().auth_refused > 0);
+    server.close().await.unwrap();
+}
+
+/// Like `coturn_style_credential`, but with an expiry offset that may be in
+/// the past.
+fn coturn_style_credential_at(secret: &str, offset_secs: i64, user: &str) -> (String, String) {
+    use base64::Engine;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+    let username = format!("{}:{}", now + offset_secs, user);
+    let key = ring::hmac::Key::new(ring::hmac::HMAC_SHA1_FOR_LEGACY_USE_ONLY, secret.as_bytes());
+    let tag = ring::hmac::sign(&key, username.as_bytes());
+    let password = base64::engine::general_purpose::STANDARD.encode(tag.as_ref());
+    (username, password)
+}
+
+// ---------------------------------------------------------------------------
+// Per-principal revocation and accounting
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn a_principal_is_revoked_across_all_its_credentials() {
+    let secret = "secret";
+    let server = TurnServer::bind(config(TurnCredentials::Ephemeral {
+        shared_secret: secret.to_string(),
+    }))
+    .await
+    .unwrap();
+
+    // The same user, holding two separately-minted credentials — different
+    // usernames, because each carries its own expiry.
+    let (u1, p1) = coturn_style_credential(secret, 300, "alice");
+    let (u2, p2) = coturn_style_credential(secret, 600, "alice");
+    assert_ne!(u1, u2);
+    let (u3, p3) = coturn_style_credential(secret, 300, "bob");
+
+    let a1 = turn_client(server.local_addr(), &u1, &p1).await.unwrap();
+    a1.allocate().await.unwrap();
+    let a2 = turn_client(server.local_addr(), &u2, &p2).await.unwrap();
+    a2.allocate().await.unwrap();
+    let b = turn_client(server.local_addr(), &u3, &p3).await.unwrap();
+    b.allocate().await.unwrap();
+    assert_eq!(server.allocations().await.unwrap().len(), 3);
+
+    // One call cuts alice off entirely, and leaves bob alone.
+    let revoked = server.revoke_principal("alice").await.unwrap();
+    assert_eq!(revoked, 2);
+
+    let remaining = server.allocations().await.unwrap();
+    assert_eq!(remaining.len(), 1);
+    assert_eq!(remaining[0].principal.as_deref(), Some("bob"));
+
+    a1.close().await.ok();
+    a2.close().await.ok();
+    b.close().await.ok();
+    server.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn closing_allocations_report_their_bytes_for_attribution() {
+    let closed: Arc<std::sync::Mutex<Vec<ClosedAllocation>>> =
+        Arc::new(std::sync::Mutex::new(Vec::new()));
+    let sink = closed.clone();
+
+    let secret = "secret";
+    let mut cfg = config(TurnCredentials::Ephemeral {
+        shared_secret: secret.to_string(),
+    });
+    cfg.on_allocation_closed = Some(Arc::new(move |report: ClosedAllocation| {
+        sink.lock().unwrap().push(report);
+    }));
+    let server = TurnServer::bind(cfg).await.unwrap();
+
+    let (username, password) = coturn_style_credential(secret, 300, "alice");
+    let client = turn_client(server.local_addr(), &username, &password)
+        .await
+        .unwrap();
+    let relay = client.allocate().await.unwrap();
+
+    // Relay some traffic so the allocation has bytes worth attributing.
+    let peer = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+    let peer_addr = peer.local_addr().unwrap();
+    tokio::spawn(async move {
+        let mut buf = [0u8; 256];
+        while let Ok((n, from)) = peer.recv_from(&mut buf).await {
+            let _ = peer.send_to(&buf[..n], from).await;
+        }
+    });
+    relay.send_to(b"billable bytes", peer_addr).await.unwrap();
+    let mut buf = [0u8; 256];
+    tokio::time::timeout(Duration::from_secs(5), relay.recv_from(&mut buf))
+        .await
+        .expect("relayed reply timed out")
+        .unwrap();
+
+    // The allocation closes; its final byte count must not vanish with it.
+    server.revoke_principal("alice").await.unwrap();
+
+    let mut report = None;
+    for _ in 0..50 {
+        if let Some(first) = closed.lock().unwrap().first().cloned() {
+            report = Some(first);
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    let report = report.expect("no closing report was delivered");
+    assert_eq!(report.principal.as_deref(), Some("alice"));
+    assert_eq!(report.username, username);
+    assert!(
+        report.relayed_bytes > 0,
+        "closing report carried no byte count"
+    );
 
     client.close().await.ok();
     server.close().await.unwrap();

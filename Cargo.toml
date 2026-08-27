@@ -39,6 +39,10 @@ rand = { version = "0.10", features = ["thread_rng"] }
 # so it comes from the maintained implementation, not from scratch.
 turn = { version = "0.17", features = ["metrics"] }
 webrtc-util = "0.17"
+# For coturn-style ephemeral TURN credentials. The HMAC itself comes from a
+# maintained implementation; only the documented composition is ours.
+ring = "0.17"
+base64 = "0.22"
 
 # === WASI P2 only ===
 [target.'cfg(all(target_arch = "wasm32", target_env = "p2"))'.dependencies]

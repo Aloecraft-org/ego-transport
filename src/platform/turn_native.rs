@@ -40,7 +40,7 @@ use std::time::Duration;
 
 use thiserror::Error;
 use tokio::net::UdpSocket;
-use turn::auth::{AuthHandler, LongTermAuthHandler, generate_auth_key};
+use turn::auth::{AuthHandler, generate_auth_key};
 use turn::relay::RelayAddressGenerator;
 use turn::relay::relay_static::RelayAddressGeneratorStatic;
 use turn::server::Server;
@@ -100,10 +100,15 @@ pub enum TurnCredentials {
     Static(HashMap<String, String>),
 
     /// Time-limited credentials derived from a shared secret — the scheme
-    /// coturn calls "REST". The username is an expiry timestamp and the
+    /// coturn calls "REST". The username carries its own expiry and the
     /// password is its HMAC, so a coordinator holding the secret can mint
-    /// short-lived grants (see [`ephemeral_credentials`]) without the server
-    /// keeping any per-user state.
+    /// short-lived grants without the server keeping any per-user state.
+    ///
+    /// Both username shapes coturn accepts are verified here: a bare
+    /// `<expiry>` (see [`ephemeral_credentials`]) and coturn's documented
+    /// `<expiry>:<user>` (see [`ephemeral_credentials_for`]), which names the
+    /// principal and so makes allocations attributable and
+    /// [`TurnServer::revoke_principal`] possible. Prefer the latter.
     Ephemeral { shared_secret: String },
 
     /// The consumer decides — see [`CredentialVerifier`]. This is where an
@@ -134,24 +139,99 @@ impl std::fmt::Debug for TurnCredentials {
     }
 }
 
-/// Mint a time-limited username/password pair valid for `ttl`, to hand to a
-/// peer alongside the relay's URL (see
+// --- coturn's REST credential scheme ---------------------------------------
+//
+// A credential is a username carrying its own expiry, and a password that is
+// the HMAC of that username under a shared secret. The server stores nothing:
+// it recomputes the HMAC and checks the clock.
+//
+// coturn accepts the username in two shapes, and so does this server:
+//
+//   <expiry>            — expiry alone
+//   <expiry>:<user>     — expiry and the principal it was issued to
+//
+// The second is the form coturn documents, and the one worth preferring: it
+// says *who* a credential belongs to, which is what
+// [`TurnServer::revoke_principal`] needs to revoke a user rather than one
+// specific credential. Some implementations (including the one inside
+// webrtc-rs) only ever parse the bare form, so both are accepted here —
+// rejecting a well-formed coturn credential would be an interop bug waiting
+// to happen.
+//
+// In both shapes the HMAC covers the *whole* username, suffix included.
+
+/// The expiry portion of an ephemeral username.
+fn credential_expiry(username: &str) -> Option<u64> {
+    let expiry = username.split_once(':').map_or(username, |(head, _)| head);
+    expiry.parse::<u64>().ok()
+}
+
+/// The principal an ephemeral username was issued to, when it carries one.
+///
+/// `"1700000000:alice"` yields `Some("alice")`; a bare `"1700000000"` yields
+/// `None`.
+pub fn credential_principal(username: &str) -> Option<&str> {
+    username
+        .split_once(':')
+        .map(|(_, user)| user)
+        .filter(|user| !user.is_empty())
+}
+
+/// The password for an ephemeral username: base64 of its HMAC-SHA1 under the
+/// shared secret, over the full username string.
+fn credential_password(username: &str, shared_secret: &str) -> String {
+    use base64::Engine;
+    let key = ring::hmac::Key::new(
+        ring::hmac::HMAC_SHA1_FOR_LEGACY_USE_ONLY,
+        shared_secret.as_bytes(),
+    );
+    let tag = ring::hmac::sign(&key, username.as_bytes());
+    base64::engine::general_purpose::STANDARD.encode(tag.as_ref())
+}
+
+fn now_secs() -> Result<u64, TurnError> {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .map_err(|e| TurnError::Protocol(format!("system clock before the epoch: {e}")))
+}
+
+/// Mint a time-limited credential valid for `ttl`, to hand to a peer
+/// alongside the relay's URL (see
 /// [`IceServerConfig::turn`](crate::transport::rtc_signaling::IceServerConfig::turn)).
 ///
-/// The pair verifies against a server configured with
-/// [`TurnCredentials::Ephemeral`] holding the same secret. Nothing is stored
-/// on either side: the username *is* the expiry.
+/// The username is the bare expiry. Prefer
+/// [`ephemeral_credentials_for`] where the credential should name its
+/// principal, which is what makes per-user revocation possible.
 pub fn ephemeral_credentials(
     shared_secret: &str,
     ttl: Duration,
 ) -> Result<(String, String), TurnError> {
-    turn::auth::generate_long_term_credentials(shared_secret, ttl).map_err(turn_err)
+    let username = (now_secs()? + ttl.as_secs()).to_string();
+    let password = credential_password(&username, shared_secret);
+    Ok((username, password))
+}
+
+/// Mint a time-limited credential issued to `user`, in coturn's
+/// `<expiry>:<user>` form.
+///
+/// Because the username names its principal, every allocation made with it
+/// is attributable, and [`TurnServer::revoke_principal`] can drop all of that
+/// user's allocations at once.
+pub fn ephemeral_credentials_for(
+    shared_secret: &str,
+    ttl: Duration,
+    user: &str,
+) -> Result<(String, String), TurnError> {
+    let username = format!("{}:{}", now_secs()? + ttl.as_secs(), user);
+    let password = credential_password(&username, shared_secret);
+    Ok((username, password))
 }
 
 /// Resolved form of [`TurnCredentials`], built once at bind time.
 enum ResolvedAuth {
     Static(HashMap<String, String>),
-    Ephemeral(LongTermAuthHandler),
+    Ephemeral { shared_secret: String },
     Verifier(CredentialVerifier),
 }
 
@@ -169,19 +249,19 @@ impl AuthHandler for CredentialAuth {
     ) -> Result<Vec<u8>, turn::Error> {
         let password = match &self.auth {
             ResolvedAuth::Static(map) => map.get(username).cloned(),
-            // Expiry and HMAC checking stay in the maintained implementation.
-            ResolvedAuth::Ephemeral(handler) => {
-                let key = handler.auth_handle(username, realm, src_addr);
-                return match key {
-                    Ok(key) => {
-                        self.metrics.auth_ok.fetch_add(1, Ordering::Relaxed);
-                        Ok(key)
+            ResolvedAuth::Ephemeral { shared_secret } => {
+                // Accept both `<expiry>` and `<expiry>:<user>`; anything that
+                // is not one of those has no expiry to check and is refused.
+                match (credential_expiry(username), now_secs()) {
+                    (Some(expiry), Ok(now)) if expiry > now => {
+                        Some(credential_password(username, shared_secret))
                     }
-                    Err(e) => {
-                        self.metrics.auth_refused.fetch_add(1, Ordering::Relaxed);
-                        Err(e)
+                    (Some(_), Ok(_)) => {
+                        log::debug!("[turn] refusing expired credential from {src_addr}");
+                        None
                     }
-                };
+                    _ => None,
+                }
             }
             ResolvedAuth::Verifier(verify) => verify(username, realm, src_addr),
         };
@@ -346,9 +426,12 @@ impl TurnSnapshot {
 /// One live allocation, as reported by [`TurnServer::allocations`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AllocationSnapshot {
-    /// The username that authenticated this allocation — the principal the
-    /// consumer's own model can map back to whoever it represents.
+    /// The username that authenticated this allocation, verbatim.
     pub username: String,
+    /// The principal the username names, for credentials minted in
+    /// `<expiry>:<user>` form (see [`ephemeral_credentials_for`]). `None` for
+    /// bare-expiry or static usernames, where the username is the identity.
+    pub principal: Option<String>,
     /// The relay address peers send to.
     pub relay_addr: SocketAddr,
     /// The client that holds the allocation.
@@ -357,12 +440,38 @@ pub struct AllocationSnapshot {
     pub relayed_bytes: u64,
 }
 
+/// A final report for one allocation, delivered as it closes.
+///
+/// Polling [`TurnServer::allocations`] can only see allocations that are
+/// still open, so an allocation that opens and closes between two polls —
+/// the shape of a short call — would otherwise take its byte count with it.
+/// Relay bytes are the resource that costs real money, so every allocation
+/// files a closing report through
+/// [`TurnServerConfig::on_allocation_closed`], and no traffic goes
+/// unattributed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClosedAllocation {
+    pub username: String,
+    /// The principal, when the username names one.
+    pub principal: Option<String>,
+    pub relay_addr: SocketAddr,
+    pub client_addr: SocketAddr,
+    /// Total bytes this allocation relayed over its whole life.
+    pub relayed_bytes: u64,
+}
+
+/// Called once per allocation as it closes, with its final byte count.
+///
+/// It runs on the server's close-notification task, so it should hand the
+/// report off rather than block.
+pub type AllocationCloseHook = Arc<dyn Fn(ClosedAllocation) + Send + Sync>;
+
 // ---------------------------------------------------------------------------
 // Server
 // ---------------------------------------------------------------------------
 
 /// Configuration for a [`TurnServer`].
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct TurnServerConfig {
     /// Address to listen on, e.g. `"0.0.0.0:3478"`.
     pub listen_addr: String,
@@ -381,6 +490,30 @@ pub struct TurnServerConfig {
     pub max_allocations: usize,
     /// Lifetime of a channel binding.
     pub channel_bind_timeout: Duration,
+    /// Called as each allocation closes, with its final byte count. Set this
+    /// to account for relayed traffic without racing the poll interval — see
+    /// [`ClosedAllocation`].
+    pub on_allocation_closed: Option<AllocationCloseHook>,
+}
+
+// Hand-written: the close hook is not `Debug`, and the credentials print
+// themselves without their secrets.
+impl std::fmt::Debug for TurnServerConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TurnServerConfig")
+            .field("listen_addr", &self.listen_addr)
+            .field("relay_address", &self.relay_address)
+            .field("relay_bind_ip", &self.relay_bind_ip)
+            .field("realm", &self.realm)
+            .field("credentials", &self.credentials)
+            .field("max_allocations", &self.max_allocations)
+            .field("channel_bind_timeout", &self.channel_bind_timeout)
+            .field(
+                "on_allocation_closed",
+                &self.on_allocation_closed.as_ref().map(|_| "<hook>"),
+            )
+            .finish()
+    }
 }
 
 impl TurnServerConfig {
@@ -395,6 +528,7 @@ impl TurnServerConfig {
             credentials,
             max_allocations: 256,
             channel_bind_timeout: Duration::from_secs(600),
+            on_allocation_closed: None,
         }
     }
 }
@@ -427,9 +561,9 @@ impl TurnServer {
                 return Err(TurnError::NoCredentials);
             }
             TurnCredentials::Static(map) => ResolvedAuth::Static(map.clone()),
-            TurnCredentials::Ephemeral { shared_secret } => {
-                ResolvedAuth::Ephemeral(LongTermAuthHandler::new(shared_secret.clone()))
-            }
+            TurnCredentials::Ephemeral { shared_secret } => ResolvedAuth::Ephemeral {
+                shared_secret: shared_secret.clone(),
+            },
             TurnCredentials::Verifier(verify) => ResolvedAuth::Verifier(verify.clone()),
         };
 
@@ -445,9 +579,11 @@ impl TurnServer {
         // the final byte count for each allocation.
         let (close_tx, mut close_rx) = tokio::sync::mpsc::channel(64);
         let close_metrics = metrics.clone();
+        let close_hook = config.on_allocation_closed.clone();
         tokio::spawn(async move {
             while let Some(info) = close_rx.recv().await {
                 let info: turn::allocation::AllocationInfo = info;
+                let relayed_bytes = info.relayed_bytes as u64;
                 close_metrics
                     .live_allocations
                     .fetch_sub(1, Ordering::AcqRel);
@@ -456,8 +592,21 @@ impl TurnServer {
                     .fetch_add(1, Ordering::Relaxed);
                 close_metrics
                     .relayed_bytes_closed
-                    .fetch_add(info.relayed_bytes as u64, Ordering::Relaxed);
+                    .fetch_add(relayed_bytes, Ordering::Relaxed);
                 close_metrics.touch();
+
+                // The allocation's final report. Without this, the bytes of a
+                // short-lived allocation would vanish between two polls of
+                // `allocations()`.
+                if let Some(hook) = &close_hook {
+                    hook(ClosedAllocation {
+                        principal: credential_principal(&info.username).map(str::to_owned),
+                        username: info.username,
+                        relay_addr: info.relay_addr,
+                        client_addr: info.five_tuple.src_addr,
+                        relayed_bytes,
+                    });
+                }
             }
         });
 
@@ -538,6 +687,7 @@ impl TurnServer {
         Ok(info
             .into_iter()
             .map(|(five_tuple, info)| AllocationSnapshot {
+                principal: credential_principal(&info.username).map(str::to_owned),
                 username: info.username,
                 relay_addr: info.relay_addr,
                 client_addr: five_tuple.src_addr,
@@ -546,15 +696,49 @@ impl TurnServer {
             .collect())
     }
 
-    /// Drop every allocation held by `username`.
+    /// Drop every allocation whose username matches exactly.
     ///
-    /// The mechanism for revocation; deciding *when* to revoke belongs to
-    /// whoever issued the credential.
+    /// This revokes one *credential*. To revoke a user across every
+    /// credential they hold, see [`revoke_principal`](Self::revoke_principal).
+    /// Either way this is only the mechanism; deciding *when* to revoke
+    /// belongs to whoever issued the credential.
     pub async fn revoke(&self, username: &str) -> Result<(), TurnError> {
         self.inner
             .delete_allocations_by_username(username.to_string())
             .await
             .map_err(turn_err)
+    }
+
+    /// Drop every allocation held by `user`, across all of that user's
+    /// credentials. Returns how many allocations were revoked.
+    ///
+    /// Ephemeral usernames carry an expiry, so the same user shows up under a
+    /// different username each time they are issued one. Matching on the
+    /// principal — the `<user>` half of an `<expiry>:<user>` username — is
+    /// what makes "cut this user off" a single operation rather than a hunt
+    /// through every credential they might be holding. Only allocations whose
+    /// username names a principal can match; a bare-expiry or static username
+    /// has no principal to compare and is left alone.
+    pub async fn revoke_principal(&self, user: &str) -> Result<usize, TurnError> {
+        let allocations = self.allocations().await?;
+        let matching: Vec<&AllocationSnapshot> = allocations
+            .iter()
+            .filter(|a| a.principal.as_deref() == Some(user))
+            .collect();
+
+        // One delete call per distinct username: each removes every
+        // allocation under that username, so repeating it would be wasted
+        // work.
+        let mut usernames: Vec<&str> = matching.iter().map(|a| a.username.as_str()).collect();
+        usernames.sort_unstable();
+        usernames.dedup();
+        for username in usernames {
+            self.inner
+                .delete_allocations_by_username(username.to_string())
+                .await
+                .map_err(turn_err)?;
+        }
+        Ok(matching.len())
     }
 
     /// Stop the server and release its allocations.
