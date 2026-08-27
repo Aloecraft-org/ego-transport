@@ -516,6 +516,17 @@ impl IceServerConfig {
         }
     }
 
+    /// A STUN server of the caller's choosing — including one served by
+    /// [`crate::stun::StunServer`], which lets a deployment do its own
+    /// address discovery instead of depending on a public service.
+    pub fn stun(url: &str) -> Self {
+        Self {
+            urls: vec![url.to_string()],
+            username: None,
+            credential: None,
+        }
+    }
+
     /// A TURN server with credentials.
     pub fn turn(url: &str, username: &str, credential: &str) -> Self {
         Self {

@@ -3,12 +3,14 @@ pub mod flow;
 pub mod framing;
 pub mod identity;
 pub mod platform;
+pub mod stun;
 pub mod transport;
 
 pub use endpoint::{Availability, Endpoint, Scheme, SchemeSupport};
 pub use flow::{ConnectionMetrics, InboundBuffer, MetricsSnapshot, PushOutcome};
 pub use framing::FramedTransport;
 pub use identity::{KeyIdentity, PeerIdentity};
+pub use stun::{MappingReport, NatMapping, ProbeConfig, StunError, StunProbe};
 
 #[cfg(not(target_arch = "wasm32"))]
 pub use platform::ssh_native as ssh;

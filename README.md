@@ -84,6 +84,13 @@ Supporting pieces:
   SHA-256 fingerprint, wire-encoded key) reported verbatim, with
   `platform::server::IdentifiedListener` surfacing
   (transport, identity, remote address) per accept
+- **`stun`** — RFC 5389 binding subset for hole punching: `stun::probe`
+  learns a socket's server-reflexive address, `stun::detect_mapping` probes
+  several servers from one socket to classify the NAT
+  (endpoint-independent → punchable, endpoint-dependent → relay required),
+  and `stun::StunServer` answers binding requests so any node can serve
+  address discovery for its peers instead of depending on a public STUN
+  service (`IceServerConfig::stun` points the WebRTC scheme at it)
 
 ## Building
 
@@ -148,11 +155,13 @@ src/
 ├── framing.rs           # length-prefixed frames over any Transport
 ├── flow.rs              # bounded inbound buffer, connection metrics
 ├── identity.rs          # PeerIdentity / KeyIdentity
+├── stun.rs              # STUN binding codec, probe/mapping types
 ├── platform/            # per-platform implementations
 │   ├── tcp_native.rs / tcp_wasi.rs
 │   ├── ws_native.rs / ws_wasi.rs / ws_browser.rs
 │   ├── rtc_native.rs / rtc_wasi.rs / rtc_browser.rs
 │   ├── ssh_native.rs    # ssh scheme: russh client + server (native)
+│   ├── stun_native.rs   # STUN probe + binding server over UDP (native)
 │   ├── server.rs        # ServerBuilder, Listener, AutoDetectListener
 │   └── wasi_sync_adapter.rs
 ├── transport/           # platform-independent layer

@@ -74,6 +74,10 @@ pub enum TransportError {
     #[cfg(not(target_arch = "wasm32"))]
     #[error(transparent)]
     Ssh(#[from] crate::platform::ssh_native::SshError),
+
+    /// STUN-specific failure (address discovery, NAT mapping detection).
+    #[error(transparent)]
+    Stun(#[from] crate::stun::StunError),
 }
 
 // For native and WASI: Use async_trait with Send
