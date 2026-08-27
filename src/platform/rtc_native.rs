@@ -42,8 +42,11 @@
 //! Native only (`not(target_arch = "wasm32")`). Requires the `webrtc` crate.
 
 #[cfg(not(target_arch = "wasm32"))]
+use crate::path::{CandidateKind, PathInfo};
+#[cfg(not(target_arch = "wasm32"))]
 use crate::transport::rtc_signaling::{
-    IceCandidate, IceServerConfig, PeerRole, SignalingKind, SignalingMessage,
+    IceCandidate, IceServerConfig, IceTransportPolicy, PeerRole, RtcOptions, SignalingKind,
+    SignalingMessage,
 };
 #[cfg(not(target_arch = "wasm32"))]
 use crate::transport::{Transport, TransportError};
@@ -60,11 +63,15 @@ use webrtc::api::interceptor_registry::register_default_interceptors;
 #[cfg(not(target_arch = "wasm32"))]
 use webrtc::api::media_engine::MediaEngine;
 #[cfg(not(target_arch = "wasm32"))]
+use webrtc::api::setting_engine::SettingEngine;
+#[cfg(not(target_arch = "wasm32"))]
 use webrtc::data_channel::RTCDataChannel;
 #[cfg(not(target_arch = "wasm32"))]
 use webrtc::data_channel::data_channel_message::DataChannelMessage;
 #[cfg(not(target_arch = "wasm32"))]
 use webrtc::ice_transport::ice_candidate::RTCIceCandidateInit;
+#[cfg(not(target_arch = "wasm32"))]
+use webrtc::ice_transport::ice_candidate_type::RTCIceCandidateType;
 #[cfg(not(target_arch = "wasm32"))]
 use webrtc::ice_transport::ice_server::RTCIceServer;
 #[cfg(not(target_arch = "wasm32"))]
@@ -74,7 +81,11 @@ use webrtc::peer_connection::RTCPeerConnection;
 #[cfg(not(target_arch = "wasm32"))]
 use webrtc::peer_connection::configuration::RTCConfiguration;
 #[cfg(not(target_arch = "wasm32"))]
+use webrtc::peer_connection::policy::ice_transport_policy::RTCIceTransportPolicy;
+#[cfg(not(target_arch = "wasm32"))]
 use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
+#[cfg(not(target_arch = "wasm32"))]
+use webrtc::stats::StatsReportType;
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -88,8 +99,10 @@ const DATA_CHANNEL_LABEL: &str = "aloecraft";
 /// Created via `RtcNative::connect()`. Same interface as `RtcBrowser`.
 #[cfg(not(target_arch = "wasm32"))]
 pub struct RtcNative {
-    /// Keep the peer connection alive — dropping it tears down ICE + data channel.
-    _pc: Arc<RTCPeerConnection>,
+    /// Keeps the peer connection alive — dropping it tears down ICE and the
+    /// data channel — and is also what `path()` queries for the selected
+    /// candidate pair.
+    pc: Arc<RTCPeerConnection>,
     /// The data channel for sending.
     dc: Arc<RTCDataChannel>,
     /// Receiver for incoming messages.
@@ -106,6 +119,21 @@ impl RtcNative {
         signaling_url: &str,
         room: &str,
         ice_servers: &[IceServerConfig],
+    ) -> Result<Self, TransportError> {
+        Self::connect_with(signaling_url, room, ice_servers, RtcOptions::default()).await
+    }
+
+    /// Connect with explicit ICE options.
+    ///
+    /// [`IceTransportPolicy::RelayOnly`] forces the connection through a
+    /// relay even when a direct path is available;
+    /// [`RtcOptions::include_loopback_candidates`] allows peers that share a
+    /// host to find each other.
+    pub async fn connect_with(
+        signaling_url: &str,
+        room: &str,
+        ice_servers: &[IceServerConfig],
+        options: RtcOptions,
     ) -> Result<Self, TransportError> {
         log::info!("[RTC Native] Starting connection to room '{}'", room);
 
@@ -144,7 +172,7 @@ impl RtcNative {
 
         // ── Step 3: Create RTCPeerConnection ─────────────────────────────
 
-        let pc = create_peer_connection(ice_servers).await?;
+        let pc = create_peer_connection(ice_servers, options).await?;
 
         // ICE candidate channel — collected from on_ice_candidate callback,
         // sent through signaling
@@ -256,7 +284,7 @@ impl RtcNative {
         let pc = Arc::new(pc);
 
         Ok(Self {
-            _pc: pc,
+            pc,
             dc,
             rx: data_rx,
         })
@@ -289,6 +317,72 @@ impl Transport for RtcNative {
             None => Err(TransportError::Closed),
         }
     }
+
+    async fn path(&self) -> Option<PathInfo> {
+        Some(self.path_info().await)
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl RtcNative {
+    /// What ICE settled on for this connection: a direct route, a punched
+    /// one, or a relay.
+    ///
+    /// ICE can re-nominate a different candidate pair while a connection is
+    /// live, so this reads the current pair each time rather than caching an
+    /// answer from connect time. Before ICE settles it reports
+    /// [`PathKind::Unknown`](crate::path::PathKind::Unknown).
+    pub async fn path_info(&self) -> PathInfo {
+        let pair = self
+            .pc
+            .sctp()
+            .transport()
+            .ice_transport()
+            .get_selected_candidate_pair()
+            .await;
+
+        let Some(pair) = pair else {
+            return PathInfo::unknown();
+        };
+
+        let info = PathInfo::from_candidates(
+            candidate_kind(&pair.local.typ),
+            candidate_kind(&pair.remote.typ),
+        )
+        .with_addrs(
+            Some(format!("{}:{}", pair.local.address, pair.local.port)),
+            Some(format!("{}:{}", pair.remote.address, pair.remote.port)),
+        );
+
+        info.with_rtt_ms(self.nominated_rtt_ms().await)
+    }
+
+    /// Round-trip time of the nominated candidate pair, from the stats
+    /// report. Reported in seconds there; milliseconds is the unit the rest
+    /// of this crate speaks.
+    async fn nominated_rtt_ms(&self) -> Option<f64> {
+        let stats = self.pc.get_stats().await;
+        stats.reports.values().find_map(|report| match report {
+            StatsReportType::CandidatePair(pair) if pair.nominated => {
+                let rtt = pair.current_round_trip_time;
+                // 0.0 is "not measured yet", not a zero-latency link.
+                (rtt > 0.0).then_some(rtt * 1000.0)
+            }
+            _ => None,
+        })
+    }
+}
+
+/// Translate the webrtc crate's candidate type into this crate's vocabulary.
+#[cfg(not(target_arch = "wasm32"))]
+fn candidate_kind(typ: &RTCIceCandidateType) -> CandidateKind {
+    match typ {
+        RTCIceCandidateType::Host => CandidateKind::Host,
+        RTCIceCandidateType::Srflx => CandidateKind::ServerReflexive,
+        RTCIceCandidateType::Prflx => CandidateKind::PeerReflexive,
+        RTCIceCandidateType::Relay => CandidateKind::Relayed,
+        RTCIceCandidateType::Unspecified => CandidateKind::Unknown,
+    }
 }
 
 // ─── Peer Connection Setup ───────────────────────────────────────────────────
@@ -296,6 +390,7 @@ impl Transport for RtcNative {
 #[cfg(not(target_arch = "wasm32"))]
 async fn create_peer_connection(
     ice_servers: &[IceServerConfig],
+    options: RtcOptions,
 ) -> Result<RTCPeerConnection, TransportError> {
     let mut media_engine = MediaEngine::default();
     media_engine
@@ -306,9 +401,15 @@ async fn create_peer_connection(
     registry = register_default_interceptors(registry, &mut media_engine)
         .map_err(|e| TransportError::Protocol(format!("Interceptor error: {}", e)))?;
 
+    let mut setting_engine = SettingEngine::default();
+    if options.include_loopback_candidates {
+        setting_engine.set_include_loopback_candidate(true);
+    }
+
     let api = APIBuilder::new()
         .with_media_engine(media_engine)
         .with_interceptor_registry(registry)
+        .with_setting_engine(setting_engine)
         .build();
 
     let config = RTCConfiguration {
@@ -320,6 +421,10 @@ async fn create_peer_connection(
                 credential: s.credential.clone().unwrap_or_default(),
             })
             .collect(),
+        ice_transport_policy: match options.policy {
+            IceTransportPolicy::All => RTCIceTransportPolicy::All,
+            IceTransportPolicy::RelayOnly => RTCIceTransportPolicy::Relay,
+        },
         ..Default::default()
     };
 

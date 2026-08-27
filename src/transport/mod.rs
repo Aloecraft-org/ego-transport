@@ -6,7 +6,7 @@ pub mod signaling_hub;
 pub mod tcp;
 pub mod websocket;
 pub use bridge::TransportBridge;
-pub use p2p::connect_p2p;
+pub use p2p::{connect_p2p, connect_p2p_with};
 #[derive(Debug)]
 pub enum TransportKind {
     Tcp,
@@ -94,6 +94,18 @@ use async_trait::async_trait;
 pub trait Transport: Send + Sync {
     async fn send(&mut self, data: &[u8]) -> Result<(), TransportError>;
     async fn recv(&mut self, buf: &mut [u8]) -> Result<usize, TransportError>;
+
+    /// The path this connection is taking to its peer — direct, punched
+    /// through NATs, or relayed. See [`crate::path`].
+    ///
+    /// `None` means the transport has no such notion: a TCP or WebSocket
+    /// connection goes where it was dialed, with no candidate pair to
+    /// report. Peer-to-peer transports override this, and because the answer
+    /// can change when ICE re-nominates, it is worth re-reading rather than
+    /// sampling once.
+    async fn path(&self) -> Option<crate::path::PathInfo> {
+        None
+    }
 }
 
 // For browser: Use async_trait WITHOUT Send
@@ -105,6 +117,15 @@ use async_trait::async_trait;
 pub trait Transport {
     async fn send(&mut self, data: &[u8]) -> Result<(), TransportError>;
     async fn recv(&mut self, buf: &mut [u8]) -> Result<usize, TransportError>;
+
+    /// The path this connection is taking to its peer — direct, punched
+    /// through NATs, or relayed. See [`crate::path`].
+    ///
+    /// `None` means the transport has no such notion. Peer-to-peer
+    /// transports override this.
+    async fn path(&self) -> Option<crate::path::PathInfo> {
+        None
+    }
 }
 
 // Boxed transports delegate, so helpers like FramedTransport work over
@@ -118,6 +139,11 @@ impl Transport for Box<dyn Transport> {
     async fn recv(&mut self, buf: &mut [u8]) -> Result<usize, TransportError> {
         (**self).recv(buf).await
     }
+    // Must delegate: falling back to the default would report "no path" for
+    // a boxed transport that has one.
+    async fn path(&self) -> Option<crate::path::PathInfo> {
+        (**self).path().await
+    }
 }
 
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
@@ -128,6 +154,11 @@ impl Transport for Box<dyn Transport> {
     }
     async fn recv(&mut self, buf: &mut [u8]) -> Result<usize, TransportError> {
         (**self).recv(buf).await
+    }
+    // Must delegate: falling back to the default would report "no path" for
+    // a boxed transport that has one.
+    async fn path(&self) -> Option<crate::path::PathInfo> {
+        (**self).path().await
     }
 }
 

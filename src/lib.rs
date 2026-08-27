@@ -2,6 +2,7 @@ pub mod endpoint;
 pub mod flow;
 pub mod framing;
 pub mod identity;
+pub mod path;
 pub mod platform;
 pub mod stun;
 pub mod transport;
@@ -10,6 +11,7 @@ pub use endpoint::{Availability, Endpoint, Scheme, SchemeSupport};
 pub use flow::{ConnectionMetrics, InboundBuffer, MetricsSnapshot, PushOutcome};
 pub use framing::FramedTransport;
 pub use identity::{KeyIdentity, PeerIdentity};
+pub use path::{CandidateKind, PathInfo, PathKind};
 pub use stun::{MappingReport, NatMapping, ProbeConfig, StunError, StunProbe};
 
 #[cfg(not(target_arch = "wasm32"))]

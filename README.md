@@ -101,6 +101,14 @@ Supporting pieces:
   consumer's decision, via static pairs, coturn-style ephemeral credentials
   (`turn::ephemeral_credentials`), or a `CredentialVerifier` callback
 
+- **`path`** — what a live connection actually settled on.
+  `Transport::path()` reports `Direct`, `Punched`, or `Relayed` (with
+  candidate types, addresses and RTT) so a consumer can tell a hole-punched
+  connection from one quietly paying relay latency — they look identical
+  otherwise. `None` for transports with no such notion, like TCP.
+  `RtcOptions` carries the ICE knobs: `RelayOnly` to force traffic through a
+  relay, and `include_loopback_candidates` for peers that share a host
+
 ### NAT traversal, end to end
 
 The three pieces above are one ladder, and every rung can be self-hosted:
@@ -178,6 +186,7 @@ src/
 ├── flow.rs              # bounded inbound buffer, connection metrics
 ├── identity.rs          # PeerIdentity / KeyIdentity
 ├── stun.rs              # STUN binding codec, probe/mapping types
+├── path.rs              # direct / punched / relayed path reporting
 ├── platform/            # per-platform implementations
 │   ├── tcp_native.rs / tcp_wasi.rs
 │   ├── ws_native.rs / ws_wasi.rs / ws_browser.rs
