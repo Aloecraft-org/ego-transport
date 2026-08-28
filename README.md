@@ -37,6 +37,8 @@ pub trait Transport: Send + Sync {
 | WebRTC data channel | `webrtc` crate | relay fallback over the signaling channel | `RtcPeerConnection` |
 | SSH client | `russh` | — (typed refusal) | — (typed refusal) |
 | SSH server | `russh` | — (typed refusal) | — (typed refusal) |
+| STUN probe / server | hand-rolled codec over UDP | — (typed refusal) | — (typed refusal) |
+| TURN relay server | `turn` crate | — | — (a browser consumes a relay via ICE, it cannot run one) |
 
 ### The `ssh` scheme
 
@@ -91,6 +93,45 @@ Supporting pieces:
   and `stun::StunServer` answers binding requests so any node can serve
   address discovery for its peers instead of depending on a public STUN
   service (`IceServerConfig::stun` points the WebRTC scheme at it)
+- **`turn`** (native) — the relay for peers that cannot punch a direct path,
+  built on the `turn` crate. `turn::TurnServer` enforces a hard allocation
+  cap (refusals, never queueing), reports live allocations with their
+  principal and traffic, and supports revocation. Credentials are mandatory —
+  binding without them is a typed refusal — but *who* gets one is the
+  consumer's decision, via static pairs, coturn-style ephemeral credentials
+  (`turn::ephemeral_credentials`), or a `CredentialVerifier` callback
+- **`path`** — what a live connection actually settled on.
+  `Transport::path()` reports `Direct`, `Punched`, or `Relayed` (with
+  candidate types, addresses and RTT) so a consumer can tell a hole-punched
+  connection from one quietly paying relay latency — they look identical
+  otherwise. `None` for transports with no such notion, like TCP.
+  `RtcOptions` carries the ICE knobs: `RelayOnly` to force traffic through a
+  relay, and `include_loopback_candidates` for peers that share a host
+
+### TLS
+
+**Not implemented yet.** `wss://` is refused by name at dial time with a
+typed `SchemeUnavailable` error rather than quietly falling back to plaintext
+`ws://` — a scheme that promises encryption must never hand back a connection
+without it. `ws://` is unaffected.
+
+The work is smaller than it looks (rustls is already in the tree via
+`webrtc`, and `tokio-tungstenite` already has the plumbing), but it carries
+decisions — root store, verification policy, and whether `wss` reports peer
+identity — that should be settled first. See [`docs/tls.md`](docs/tls.md).
+
+### NAT traversal, end to end
+
+The three pieces above are one ladder, and every rung can be self-hosted:
+
+1. `stun::detect_mapping` learns the reflexive address and whether the NAT
+   assigns one mapping or one per destination.
+2. If it is endpoint-independent, a direct hole-punched path is viable, and
+   the reflexive address is what a peer aims at.
+3. If it is endpoint-dependent (symmetric), punching cannot work: peers fall
+   back to a relay. For browser peers this is the *only* fallback their ICE
+   stack can use, which is why `turn` lives here rather than being left to a
+   third-party service.
 
 ## Building
 
@@ -156,12 +197,14 @@ src/
 ├── flow.rs              # bounded inbound buffer, connection metrics
 ├── identity.rs          # PeerIdentity / KeyIdentity
 ├── stun.rs              # STUN binding codec, probe/mapping types
+├── path.rs              # direct / punched / relayed path reporting
 ├── platform/            # per-platform implementations
 │   ├── tcp_native.rs / tcp_wasi.rs
 │   ├── ws_native.rs / ws_wasi.rs / ws_browser.rs
 │   ├── rtc_native.rs / rtc_wasi.rs / rtc_browser.rs
 │   ├── ssh_native.rs    # ssh scheme: russh client + server (native)
 │   ├── stun_native.rs   # STUN probe + binding server over UDP (native)
+│   ├── turn_native.rs   # TURN relay server: auth, quota, metrics (native)
 │   ├── server.rs        # ServerBuilder, Listener, AutoDetectListener
 │   └── wasi_sync_adapter.rs
 ├── transport/           # platform-independent layer

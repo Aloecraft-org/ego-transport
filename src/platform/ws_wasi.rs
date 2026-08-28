@@ -13,6 +13,8 @@ use tungstenite::{
 
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
 pub struct WebSocketWasi {
+    /// Retains the tail of a message too large for the caller's buffer.
+    pending: crate::transport::message_buffer::MessageBuffer,
     ws: WebSocket<WasiSyncStream>,
     peer_addr: Option<String>,
 }
@@ -75,6 +77,7 @@ impl WebSocketWasi {
         log::info!("[WS WASI] Connected successfully");
 
         Ok(Self {
+            pending: Default::default(),
             ws,
             peer_addr: None,
         })
@@ -92,7 +95,11 @@ impl WebSocketWasi {
         let ws = accept(sync_stream)
             .map_err(|e| TransportError::Protocol(format!("WebSocket handshake failed: {}", e)))?;
         log::info!("[WS WASI] WebSocket handshake complete");
-        Ok(Self { ws, peer_addr })
+        Ok(Self {
+            ws,
+            peer_addr,
+            pending: Default::default(),
+        })
     }
 
     /// Accept a WebSocket connection from a TCP stream where `prefix` bytes have
@@ -120,7 +127,11 @@ impl WebSocketWasi {
 
         log::info!("[WS WASI] WebSocket handshake complete");
 
-        Ok(Self { ws, peer_addr })
+        Ok(Self {
+            ws,
+            peer_addr,
+            pending: Default::default(),
+        })
     }
 }
 
@@ -146,22 +157,23 @@ impl Transport for WebSocketWasi {
     async fn recv(&mut self, buf: &mut [u8]) -> Result<usize, TransportError> {
         log::debug!("[WS WASI] Waiting for message");
 
+        // Hand back the tail of a previous message before taking a new one,
+        // or bytes would be delivered out of order.
+        if self.pending.has_pending() {
+            return Ok(self.pending.drain_into(buf));
+        }
+
         loop {
             tokio::task::yield_now().await;
             match self.ws.read() {
                 Ok(message) => match message {
                     Message::Binary(data) => {
                         log::debug!("[WS WASI] Received binary message ({} bytes)", data.len());
-                        let n = data.len().min(buf.len());
-                        buf[..n].copy_from_slice(&data[..n]);
-                        return Ok(n);
+                        return Ok(self.pending.deliver(&data, buf));
                     }
                     Message::Text(text) => {
                         log::debug!("[WS WASI] Received text message ({} bytes)", text.len());
-                        let data = text.as_bytes();
-                        let n = data.len().min(buf.len());
-                        buf[..n].copy_from_slice(&data[..n]);
-                        return Ok(n);
+                        return Ok(self.pending.deliver(text.as_bytes(), buf));
                     }
                     Message::Ping(payload) => {
                         log::debug!("[WS WASI] Received ping, sending pong");

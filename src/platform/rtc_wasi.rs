@@ -235,6 +235,13 @@ use async_trait::async_trait;
 #[cfg(all(target_arch = "wasm32", target_env = "p2"))]
 #[async_trait]
 impl Transport for RtcWasi {
+    /// Relayed by construction: this transport forwards every byte through
+    /// the signaling server rather than establishing a peer-to-peer path, so
+    /// there is no candidate pair to inspect and no chance of it changing.
+    async fn path(&self) -> Option<crate::path::PathInfo> {
+        Some(crate::path::PathInfo::relayed())
+    }
+
     async fn send(&mut self, data: &[u8]) -> Result<(), TransportError> {
         // Encode data as base64 to safely embed in the text-based signaling format.
         // This avoids issues with binary data containing colons or newlines.

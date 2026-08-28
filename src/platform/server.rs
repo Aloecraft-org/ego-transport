@@ -298,6 +298,12 @@ impl AutoDetectListener {
         })
     }
 
+    /// The address this listener is bound to — the way to learn which port
+    /// the OS picked when binding port 0.
+    pub fn local_addr(&self) -> Result<std::net::SocketAddr, TransportError> {
+        self.inner.local_addr()
+    }
+
     /// Restrict to TCP connections only.
     pub fn tcp_only(mut self) -> Self {
         self.allow_ws = false;

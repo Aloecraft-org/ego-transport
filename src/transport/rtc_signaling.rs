@@ -505,6 +505,49 @@ pub struct IceServerConfig {
     pub credential: Option<String>,
 }
 
+/// Options for establishing a peer-to-peer connection.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct RtcOptions {
+    /// Which candidates ICE may use.
+    pub policy: IceTransportPolicy,
+    /// Gather loopback candidates as well.
+    ///
+    /// Off by default, as ICE prescribes. Turn it on when the peers share a
+    /// host, or when the address that actually routes is on the loopback
+    /// interface — the case in some VMs and containers, where leaving this
+    /// off means no candidates are gathered at all and every connection
+    /// fails.
+    pub include_loopback_candidates: bool,
+}
+
+impl RtcOptions {
+    /// Options with an explicit transport policy.
+    pub fn with_policy(policy: IceTransportPolicy) -> Self {
+        Self {
+            policy,
+            ..Default::default()
+        }
+    }
+
+    /// Also gather loopback candidates.
+    pub fn including_loopback(mut self) -> Self {
+        self.include_loopback_candidates = true;
+        self
+    }
+}
+
+/// Which candidates ICE may use when connecting.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum IceTransportPolicy {
+    /// Try everything: host, reflexive, then relay. The normal choice.
+    #[default]
+    All,
+    /// Use relay candidates only, never a direct or punched path. Forces
+    /// traffic through TURN, which costs latency and relay bandwidth but
+    /// keeps the peers' own addresses out of the exchange.
+    RelayOnly,
+}
+
 impl IceServerConfig {
     /// Google's public STUN server. Good enough for development and many
     /// production scenarios.

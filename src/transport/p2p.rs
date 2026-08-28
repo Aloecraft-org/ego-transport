@@ -29,7 +29,7 @@
 //! }
 //! ```
 
-use crate::transport::rtc_signaling::IceServerConfig;
+use crate::transport::rtc_signaling::{IceServerConfig, RtcOptions};
 use crate::transport::{Transport, TransportError};
 
 /// Connect to a peer through a signaling server.
@@ -53,6 +53,22 @@ pub async fn connect_p2p(
     room: &str,
     ice_servers: &[IceServerConfig],
 ) -> Result<Box<dyn Transport>, TransportError> {
+    connect_p2p_with(signaling_url, room, ice_servers, RtcOptions::default()).await
+}
+
+/// Connect to a peer with explicit ICE options.
+///
+/// [`IceTransportPolicy::RelayOnly`](crate::transport::rtc_signaling::IceTransportPolicy::RelayOnly)
+/// forces traffic through a relay even when a direct path is available.
+/// Whichever options are used, [`Transport::path`] reports what the
+/// connection actually settled on.
+#[allow(unused_variables)] // consumed only where ICE runs
+pub async fn connect_p2p_with(
+    signaling_url: &str,
+    room: &str,
+    ice_servers: &[IceServerConfig],
+    options: RtcOptions,
+) -> Result<Box<dyn Transport>, TransportError> {
     // ── Browser ──────────────────────────────────────────────────────────
     #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
     {
@@ -65,7 +81,7 @@ pub async fn connect_p2p(
     #[cfg(not(target_arch = "wasm32"))]
     {
         use crate::platform::rtc_native::RtcNative;
-        let rtc = RtcNative::connect(signaling_url, room, ice_servers).await?;
+        let rtc = RtcNative::connect_with(signaling_url, room, ice_servers, options).await?;
         Ok(Box::new(rtc) as Box<dyn Transport>)
     }
 

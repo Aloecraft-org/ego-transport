@@ -121,6 +121,14 @@ impl TcpListenerNative {
         Ok(Self { inner: listener })
     }
 
+    /// The address this listener is bound to.
+    ///
+    /// Binding port 0 asks the OS for a free port; this is how the caller
+    /// finds out which one it got.
+    pub fn local_addr(&self) -> Result<std::net::SocketAddr, TransportError> {
+        self.inner.local_addr().map_err(TransportError::Io)
+    }
+
     /// Accept a raw TCP connection and return the `std::net::TcpStream`.
     ///
     /// The stream is set to non-blocking mode before returning. This is the

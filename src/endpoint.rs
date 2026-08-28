@@ -212,6 +212,13 @@ pub struct Endpoint {
     pub authority: String,
     /// Path portion including the leading `/`, when present.
     pub path: Option<String>,
+    /// Whether the endpoint asked for TLS (`wss://`).
+    ///
+    /// Recorded rather than discarded: dropping it would turn `wss://` into
+    /// a plaintext connection, which is the one failure mode a transport
+    /// must never have. TLS is not implemented yet, so dialing a secure
+    /// endpoint is refused — see `docs/tls.md`.
+    pub secure: bool,
 }
 
 impl Endpoint {
@@ -223,6 +230,7 @@ impl Endpoint {
             ))
         })?;
         let scheme = Scheme::parse(scheme_str)?;
+        let secure = matches!(scheme_str, "wss" | "wsss");
         let (authority, path) = match rest.find('/') {
             Some(i) => (&rest[..i], Some(rest[i..].to_string())),
             None => (rest, None),
@@ -236,6 +244,7 @@ impl Endpoint {
             scheme,
             authority: authority.to_string(),
             path,
+            secure,
         })
     }
 
@@ -247,11 +256,24 @@ impl Endpoint {
     /// the API to use instead; they cannot be dialed from a bare address.
     pub async fn dial(&self) -> Result<Box<dyn Transport>, TransportError> {
         self.scheme.require_dial()?;
+        // TLS is not implemented yet (docs/tls.md). Refuse by name rather
+        // than quietly dialing `ws://` instead: a scheme that promises
+        // encryption must never hand back a plaintext connection.
+        if self.secure {
+            return Err(TransportError::SchemeUnavailable {
+                scheme: "wss",
+                platform: platform_name(),
+                operation: "dial",
+                reason: "TLS is not implemented yet; see docs/tls.md. \
+                         Use ws:// explicitly if plaintext is acceptable",
+            });
+        }
         match self.scheme {
             Scheme::Tcp => crate::transport::connect(&self.authority).await,
             Scheme::Wssc => {
                 let url = format!(
-                    "ws://{}{}",
+                    "{}://{}{}",
+                    if self.secure { "wss" } else { "ws" },
                     self.authority,
                     self.path.as_deref().unwrap_or("")
                 );
@@ -272,10 +294,15 @@ impl Endpoint {
 
 impl std::fmt::Display for Endpoint {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let scheme = if self.secure && self.scheme == Scheme::Wssc {
+            "wss"
+        } else {
+            self.scheme.as_str()
+        };
         write!(
             f,
             "{}://{}{}",
-            self.scheme,
+            scheme,
             self.authority,
             self.path.as_deref().unwrap_or("")
         )

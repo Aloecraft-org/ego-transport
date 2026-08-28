@@ -18,6 +18,8 @@ use tokio::sync::mpsc::{UnboundedReceiver, unbounded_channel};
 
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 pub struct WebSocketBrowser {
+    /// Retains the tail of a message too large for the caller's buffer.
+    pending: crate::transport::message_buffer::MessageBuffer,
     ws: WebSocket,
     rx: UnboundedReceiver<Vec<u8>>,
     // Keep closures alive
@@ -111,6 +113,7 @@ impl WebSocketBrowser {
         log::info!("[WS Browser] Connection established");
 
         Ok(Self {
+            pending: Default::default(),
             ws,
             rx,
             _onmessage: onmessage,
@@ -145,14 +148,18 @@ impl Transport for WebSocketBrowser {
     async fn recv(&mut self, buf: &mut [u8]) -> Result<usize, TransportError> {
         log::debug!("[WS Browser] Waiting for message");
 
+        // Hand back the tail of a previous message before taking a new one,
+        // or bytes would be delivered out of order.
+        if self.pending.has_pending() {
+            return Ok(self.pending.drain_into(buf));
+        }
+
         let mut attempts = 0;
         loop {
             match self.rx.try_recv() {
                 Ok(data) => {
                     log::debug!("[WS Browser] Received message ({} bytes)", data.len());
-                    let n = data.len().min(buf.len());
-                    buf[..n].copy_from_slice(&data[..n]);
-                    return Ok(n);
+                    return Ok(self.pending.deliver(&data, buf));
                 }
                 Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => {
                     return Err(TransportError::Closed);

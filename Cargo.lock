@@ -1043,10 +1043,11 @@ dependencies = [
 
 [[package]]
 name = "ego_transport"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "async-trait",
+ "base64",
  "bytes",
  "console_error_panic_hook",
  "ego_platform",
@@ -1056,11 +1057,13 @@ dependencies = [
  "js-sys",
  "log",
  "rand 0.10.2",
+ "ring",
  "russh",
  "thiserror 2.0.20",
  "tokio",
  "tokio-tungstenite",
  "tungstenite",
+ "turn",
  "uuid",
  "wasip2",
  "wasm-bindgen",
@@ -1068,6 +1071,7 @@ dependencies = [
  "wasm-bindgen-test",
  "web-sys",
  "webrtc",
+ "webrtc-util",
 ]
 
 [[package]]
