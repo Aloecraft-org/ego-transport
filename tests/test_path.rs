@@ -181,15 +181,7 @@ async fn a_plain_connection_reports_no_path() {
 // Live WebRTC paths
 // ---------------------------------------------------------------------------
 
-/// Verifies a direct (host-to-host) path end to end.
-///
-/// Ignored by default: it needs an environment where two local WebRTC peers
-/// can complete ICE. In this repo's CI sandbox no candidate pair is ever
-/// formed — the only interface is a non-routable 192.0.2.0/24 eth0 and
-/// outbound UDP is blocked — so ICE reaches "checking" and then fails. Run it
-/// with `cargo test --test test_path -- --ignored` somewhere with a routable
-/// interface.
-#[ignore = "needs an environment where two local WebRTC peers can complete ICE"]
+/// Verifies a peer-to-peer path end to end, with no relay configured.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn two_loopback_peers_report_a_direct_path() {
     let room = "path-direct";
@@ -221,27 +213,35 @@ async fn two_loopback_peers_report_a_direct_path() {
         .unwrap();
     assert_eq!(&buf[..n], b"ping");
 
-    // Both peers are on this machine with no STUN server configured, so ICE
-    // has only host candidates to work with.
+    // No relay is configured, so whatever ICE picked must be peer-to-peer.
+    // Which flavour it is depends on timing: a peer that receives a binding
+    // request from an address it has not been told about learns it as
+    // peer-reflexive, so `host <-> prflx` (Punched) is as legitimate an
+    // outcome here as `host <-> host` (Direct). What matters is that no
+    // relay is involved.
     let path = peer_a
         .path()
         .await
         .expect("a WebRTC transport must report a path");
-    assert_eq!(path.kind, PathKind::Direct, "path was {path}");
-    assert_eq!(path.local, CandidateKind::Host);
-    assert_eq!(path.remote, CandidateKind::Host);
-    assert!(path.is_peer_to_peer());
-    assert!(!path.is_relayed());
+    assert!(
+        path.is_peer_to_peer(),
+        "expected a peer-to-peer path, got {path}"
+    );
+    assert!(!path.is_relayed(), "no relay was configured, got {path}");
+    assert!(
+        matches!(path.kind, PathKind::Direct | PathKind::Punched),
+        "unexpected path kind: {path}"
+    );
+    assert_ne!(path.local, CandidateKind::Relayed);
+    assert_ne!(path.remote, CandidateKind::Relayed);
     assert!(path.local_addr.is_some(), "path should name its addresses");
     assert!(path.remote_addr.is_some());
 }
 
 /// The claim this whole feature exists to support: a connection that works
 /// but is quietly relayed says so — verified against a real TURN server from
-/// this crate, with ICE forced to relay-only.
-///
-/// Ignored for the same reason as the direct-path test above.
-#[ignore = "needs an environment where two local WebRTC peers can complete ICE"]
+/// this crate, with ICE forced to relay-only. Doubles as the end-to-end proof
+/// that the relay carries real WebRTC traffic.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_relay_only_connection_reports_a_relayed_path() {
     // A real relay from this crate, carrying real WebRTC traffic.

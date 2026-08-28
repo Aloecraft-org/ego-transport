@@ -178,29 +178,38 @@ impl RtcNative {
 
         // ICE candidate channel — collected from on_ice_candidate callback,
         // sent through signaling
-        let (ice_tx, mut ice_rx) = mpsc::channel::<IceCandidate>(64);
+        // `Some(candidate)` while gathering, then a single `None` when the
+        // agent is done — the signal that lets us tell the peer we have no
+        // more candidates coming.
+        let (ice_tx, mut ice_rx) = mpsc::channel::<Option<IceCandidate>>(64);
 
         // Set up ICE candidate callback
         let ice_tx_clone = ice_tx.clone();
         pc.on_ice_candidate(Box::new(move |candidate| {
             let ice_tx = ice_tx_clone.clone();
             Box::pin(async move {
-                if let Some(c) = candidate {
-                    let candidate_str = c.to_json().map(|j| j.candidate).unwrap_or_default();
-                    if candidate_str.is_empty() {
-                        return;
-                    }
-                    let sdp_mid = c
-                        .to_json()
-                        .map(|j| j.sdp_mid.unwrap_or_default())
-                        .unwrap_or_default();
-                    let sdp_mline_index = c
-                        .to_json()
-                        .map(|j| j.sdp_mline_index.unwrap_or(0))
-                        .unwrap_or(0);
+                match candidate {
+                    Some(c) => {
+                        let candidate_str = c.to_json().map(|j| j.candidate).unwrap_or_default();
+                        if candidate_str.is_empty() {
+                            return;
+                        }
+                        let sdp_mid = c
+                            .to_json()
+                            .map(|j| j.sdp_mid.unwrap_or_default())
+                            .unwrap_or_default();
+                        let sdp_mline_index = c
+                            .to_json()
+                            .map(|j| j.sdp_mline_index.unwrap_or(0))
+                            .unwrap_or(0);
 
-                    let ice = IceCandidate::new(&candidate_str, &sdp_mid, sdp_mline_index);
-                    ice_tx.send(ice).await.ok();
+                        let ice = IceCandidate::new(&candidate_str, &sdp_mid, sdp_mline_index);
+                        ice_tx.send(Some(ice)).await.ok();
+                    }
+                    // Gathering finished.
+                    None => {
+                        ice_tx.send(None).await.ok();
+                    }
                 }
             })
         }));
@@ -509,25 +518,68 @@ async fn recv_signal(
 
 /// Drain collected ICE candidates and send them through signaling.
 #[cfg(not(target_arch = "wasm32"))]
-async fn drain_ice(
-    ice_rx: &mut mpsc::Receiver<IceCandidate>,
-    transport: &mut Box<dyn Transport>,
-    room: &str,
-) -> Result<(), TransportError> {
-    while let Ok(ice) = ice_rx.try_recv() {
-        send_signal(transport, &SignalingMessage::ice(room, &ice)).await?;
+/// One thing that can happen while the two sides are exchanging ICE.
+///
+/// Local candidates and peer messages arrive independently, so the loop waits
+/// on both at once rather than letting one starve the other.
+#[cfg(not(target_arch = "wasm32"))]
+enum IceEvent {
+    /// A candidate this agent gathered, to forward to the peer.
+    LocalCandidate(IceCandidate),
+    /// This agent has no more candidates coming.
+    LocalDone,
+    /// A message from the peer.
+    Remote(SignalingMessage),
+}
+
+/// Wait for whichever comes first: a locally gathered candidate, or a message
+/// from the peer.
+///
+/// Forwarding local candidates only when a peer message happens to arrive —
+/// draining a channel with `try_recv` around a blocking read — deadlocks:
+/// each side ends up waiting for the other to speak first, and candidates
+/// gathered after the last message are never sent at all. Waiting on both
+/// sources is what makes this trickle ICE rather than a turn-taking protocol.
+#[cfg(not(target_arch = "wasm32"))]
+async fn next_ice_event(
+    signal: &mut Box<dyn Transport>,
+    ice_rx: &mut mpsc::Receiver<Option<IceCandidate>>,
+    local_done: bool,
+) -> Result<IceEvent, TransportError> {
+    if local_done {
+        // Nothing more will come from our own agent; just read the peer.
+        return Ok(IceEvent::Remote(recv_signal(signal).await?));
     }
-    Ok(())
+    tokio::select! {
+        local = ice_rx.recv() => match local {
+            Some(Some(ice)) => Ok(IceEvent::LocalCandidate(ice)),
+            // `None` from the agent, or a closed channel: gathering is over.
+            Some(None) | None => Ok(IceEvent::LocalDone),
+        },
+        msg = recv_signal(signal) => Ok(IceEvent::Remote(msg?)),
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+async fn add_remote_candidate(pc: &RTCPeerConnection, payload: &str) {
+    if let Some(ice) = IceCandidate::deserialize(payload) {
+        let init = RTCIceCandidateInit {
+            candidate: ice.candidate,
+            sdp_mid: Some(ice.sdp_mid),
+            sdp_mline_index: Some(ice.sdp_mline_index),
+            ..Default::default()
+        };
+        pc.add_ice_candidate(init).await.ok();
+    }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 async fn exchange_signaling_offerer(
     pc: &RTCPeerConnection,
     signal: &mut Box<dyn Transport>,
-    ice_rx: &mut mpsc::Receiver<IceCandidate>,
+    ice_rx: &mut mpsc::Receiver<Option<IceCandidate>>,
     room: &str,
 ) -> Result<(), TransportError> {
-    // Create offer
     let offer = pc
         .create_offer(None)
         .await
@@ -540,54 +592,45 @@ async fn exchange_signaling_offerer(
         .await
         .map_err(|e| TransportError::Protocol(format!("set_local_description failed: {}", e)))?;
 
-    // Send offer
     send_signal(signal, &SignalingMessage::offer(room, &offer_sdp)).await?;
 
-    // Drain early ICE candidates
-    drain_ice(ice_rx, signal, room).await?;
-
-    // Wait for answer + remote ICE
     let mut got_answer = false;
-    loop {
-        drain_ice(ice_rx, signal, room).await?;
+    let mut local_done = false;
+    let mut remote_done = false;
 
-        let msg = recv_signal(signal).await?;
-        match msg.kind {
-            SignalingKind::Answer => {
-                log::info!("[RTC Native] Received answer ({} bytes)", msg.payload.len());
-                let answer = RTCSessionDescription::answer(msg.payload)
-                    .map_err(|e| TransportError::Protocol(format!("Bad answer SDP: {}", e)))?;
-                pc.set_remote_description(answer).await.map_err(|e| {
-                    TransportError::Protocol(format!("set_remote_description failed: {}", e))
-                })?;
-                got_answer = true;
+    while !(got_answer && local_done && remote_done) {
+        match next_ice_event(signal, ice_rx, local_done).await? {
+            IceEvent::LocalCandidate(ice) => {
+                send_signal(signal, &SignalingMessage::ice(room, &ice)).await?;
             }
-            SignalingKind::Ice => {
-                if let Some(ice) = IceCandidate::deserialize(&msg.payload) {
-                    let init = RTCIceCandidateInit {
-                        candidate: ice.candidate,
-                        sdp_mid: Some(ice.sdp_mid),
-                        sdp_mline_index: Some(ice.sdp_mline_index),
-                        ..Default::default()
-                    };
-                    pc.add_ice_candidate(init).await.ok();
+            IceEvent::LocalDone => {
+                local_done = true;
+                // Tell the peer immediately, rather than waiting for it to
+                // announce first — both sides waiting is the deadlock.
+                send_signal(signal, &SignalingMessage::ice_done(room)).await?;
+            }
+            IceEvent::Remote(msg) => match msg.kind {
+                SignalingKind::Answer => {
+                    log::info!("[RTC Native] Received answer ({} bytes)", msg.payload.len());
+                    let answer = RTCSessionDescription::answer(msg.payload)
+                        .map_err(|e| TransportError::Protocol(format!("Bad answer SDP: {}", e)))?;
+                    pc.set_remote_description(answer).await.map_err(|e| {
+                        TransportError::Protocol(format!("set_remote_description failed: {}", e))
+                    })?;
+                    got_answer = true;
                 }
-            }
-            SignalingKind::IceDone => {
-                log::info!("[RTC Native] Remote ICE gathering complete");
-                if got_answer {
-                    break;
+                SignalingKind::Ice => add_remote_candidate(pc, &msg.payload).await,
+                SignalingKind::IceDone => {
+                    log::info!("[RTC Native] Remote ICE gathering complete");
+                    remote_done = true;
                 }
-            }
-            SignalingKind::PeerLeft => {
-                return Err(TransportError::Protocol("Peer left".to_string()));
-            }
-            _ => {}
+                SignalingKind::PeerLeft => {
+                    return Err(TransportError::Protocol("Peer left".to_string()));
+                }
+                _ => {}
+            },
         }
     }
-
-    send_signal(signal, &SignalingMessage::ice_done(room)).await?;
-    drain_ice(ice_rx, signal, room).await?;
 
     Ok(())
 }
@@ -596,48 +639,58 @@ async fn exchange_signaling_offerer(
 async fn exchange_signaling_answerer(
     pc: &RTCPeerConnection,
     signal: &mut Box<dyn Transport>,
-    ice_rx: &mut mpsc::Receiver<IceCandidate>,
+    ice_rx: &mut mpsc::Receiver<Option<IceCandidate>>,
     room: &str,
 ) -> Result<(), TransportError> {
-    // Wait for offer
+    // Candidates can arrive before the offer does; they cannot be applied
+    // until there is a remote description to apply them to.
     let mut pending_ice: Vec<IceCandidate> = Vec::new();
+    let mut local_done = false;
+    let mut remote_done = false;
 
+    // Phase 1: wait for the offer, forwarding our own candidates meanwhile.
     loop {
-        let msg = recv_signal(signal).await?;
-        match msg.kind {
-            SignalingKind::Offer => {
-                log::info!("[RTC Native] Received offer ({} bytes)", msg.payload.len());
-                let offer = RTCSessionDescription::offer(msg.payload)
-                    .map_err(|e| TransportError::Protocol(format!("Bad offer SDP: {}", e)))?;
-                pc.set_remote_description(offer).await.map_err(|e| {
-                    TransportError::Protocol(format!("set_remote_description failed: {}", e))
-                })?;
-
-                // Apply buffered ICE candidates
-                for ice in pending_ice.drain(..) {
-                    let init = RTCIceCandidateInit {
-                        candidate: ice.candidate,
-                        sdp_mid: Some(ice.sdp_mid),
-                        sdp_mline_index: Some(ice.sdp_mline_index),
-                        ..Default::default()
-                    };
-                    pc.add_ice_candidate(init).await.ok();
+        match next_ice_event(signal, ice_rx, local_done).await? {
+            IceEvent::LocalCandidate(ice) => {
+                send_signal(signal, &SignalingMessage::ice(room, &ice)).await?;
+            }
+            IceEvent::LocalDone => {
+                local_done = true;
+                send_signal(signal, &SignalingMessage::ice_done(room)).await?;
+            }
+            IceEvent::Remote(msg) => match msg.kind {
+                SignalingKind::Offer => {
+                    log::info!("[RTC Native] Received offer ({} bytes)", msg.payload.len());
+                    let offer = RTCSessionDescription::offer(msg.payload)
+                        .map_err(|e| TransportError::Protocol(format!("Bad offer SDP: {}", e)))?;
+                    pc.set_remote_description(offer).await.map_err(|e| {
+                        TransportError::Protocol(format!("set_remote_description failed: {}", e))
+                    })?;
+                    for ice in pending_ice.drain(..) {
+                        let init = RTCIceCandidateInit {
+                            candidate: ice.candidate,
+                            sdp_mid: Some(ice.sdp_mid),
+                            sdp_mline_index: Some(ice.sdp_mline_index),
+                            ..Default::default()
+                        };
+                        pc.add_ice_candidate(init).await.ok();
+                    }
+                    break;
                 }
-                break;
-            }
-            SignalingKind::Ice => {
-                if let Some(ice) = IceCandidate::deserialize(&msg.payload) {
-                    pending_ice.push(ice);
+                SignalingKind::Ice => {
+                    if let Some(ice) = IceCandidate::deserialize(&msg.payload) {
+                        pending_ice.push(ice);
+                    }
                 }
-            }
-            SignalingKind::PeerLeft => {
-                return Err(TransportError::Protocol("Peer left".to_string()));
-            }
-            _ => {}
+                SignalingKind::IceDone => remote_done = true,
+                SignalingKind::PeerLeft => {
+                    return Err(TransportError::Protocol("Peer left".to_string()));
+                }
+                _ => {}
+            },
         }
     }
 
-    // Create answer
     let answer = pc
         .create_answer(None)
         .await
@@ -650,36 +703,31 @@ async fn exchange_signaling_answerer(
         .await
         .map_err(|e| TransportError::Protocol(format!("set_local_description failed: {}", e)))?;
 
-    // Send answer
     send_signal(signal, &SignalingMessage::answer(room, &answer_sdp)).await?;
-    drain_ice(ice_rx, signal, room).await?;
 
-    // Continue receiving remote ICE until done
-    loop {
-        drain_ice(ice_rx, signal, room).await?;
-        let msg = recv_signal(signal).await?;
-        match msg.kind {
-            SignalingKind::Ice => {
-                if let Some(ice) = IceCandidate::deserialize(&msg.payload) {
-                    let init = RTCIceCandidateInit {
-                        candidate: ice.candidate,
-                        sdp_mid: Some(ice.sdp_mid),
-                        sdp_mline_index: Some(ice.sdp_mline_index),
-                        ..Default::default()
-                    };
-                    pc.add_ice_candidate(init).await.ok();
+    // Phase 2: trickle until both sides have finished gathering.
+    while !(local_done && remote_done) {
+        match next_ice_event(signal, ice_rx, local_done).await? {
+            IceEvent::LocalCandidate(ice) => {
+                send_signal(signal, &SignalingMessage::ice(room, &ice)).await?;
+            }
+            IceEvent::LocalDone => {
+                local_done = true;
+                send_signal(signal, &SignalingMessage::ice_done(room)).await?;
+            }
+            IceEvent::Remote(msg) => match msg.kind {
+                SignalingKind::Ice => add_remote_candidate(pc, &msg.payload).await,
+                SignalingKind::IceDone => {
+                    log::info!("[RTC Native] Remote ICE gathering complete");
+                    remote_done = true;
                 }
-            }
-            SignalingKind::IceDone => {
-                log::info!("[RTC Native] Remote ICE gathering complete");
-                break;
-            }
-            _ => {}
+                SignalingKind::PeerLeft => {
+                    return Err(TransportError::Protocol("Peer left".to_string()));
+                }
+                _ => {}
+            },
         }
     }
-
-    send_signal(signal, &SignalingMessage::ice_done(room)).await?;
-    drain_ice(ice_rx, signal, room).await?;
 
     Ok(())
 }
