@@ -203,3 +203,38 @@ fn inbound_buffer_byte_cap_binds_independently() {
     assert_eq!(buf.try_push(vec![0u8; 3]), PushOutcome::Accepted);
     assert_eq!(buf.bytes(), 3);
 }
+
+#[tokio::test]
+async fn a_secure_endpoint_is_refused_rather_than_downgraded() {
+    // `wss://` promises encryption. TLS is not implemented yet, so dialing
+    // must fail by name — silently connecting over plaintext `ws://` would
+    // be the worst possible reading of "best effort".
+    let e = Endpoint::parse("wss://example.net:443/socket").unwrap();
+    assert!(e.secure, "the wss scheme must be remembered, not discarded");
+    assert_eq!(
+        e.to_string(),
+        "wss://example.net:443/socket",
+        "a secure endpoint must not render as plaintext"
+    );
+
+    let err = match e.dial().await {
+        Ok(_) => panic!("a wss:// endpoint must not dial over plaintext"),
+        Err(e) => e,
+    };
+    match err {
+        TransportError::SchemeUnavailable {
+            scheme, operation, ..
+        } => {
+            assert_eq!(scheme, "wss");
+            assert_eq!(operation, "dial");
+        }
+        other => panic!("expected a typed TLS refusal, got {other:?}"),
+    }
+
+    // Plaintext ws:// is unaffected: it is an alias for wssc, so it renders
+    // under the canonical scheme name and carries no TLS promise to break.
+    let plain = Endpoint::parse("ws://example.net:80/socket").unwrap();
+    assert!(!plain.secure);
+    assert_eq!(plain.scheme, Scheme::Wssc);
+    assert_eq!(plain.to_string(), "wssc://example.net:80/socket");
+}

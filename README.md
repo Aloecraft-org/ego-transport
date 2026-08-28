@@ -100,7 +100,6 @@ Supporting pieces:
   binding without them is a typed refusal — but *who* gets one is the
   consumer's decision, via static pairs, coturn-style ephemeral credentials
   (`turn::ephemeral_credentials`), or a `CredentialVerifier` callback
-
 - **`path`** — what a live connection actually settled on.
   `Transport::path()` reports `Direct`, `Punched`, or `Relayed` (with
   candidate types, addresses and RTT) so a consumer can tell a hole-punched
@@ -108,6 +107,18 @@ Supporting pieces:
   otherwise. `None` for transports with no such notion, like TCP.
   `RtcOptions` carries the ICE knobs: `RelayOnly` to force traffic through a
   relay, and `include_loopback_candidates` for peers that share a host
+
+### TLS
+
+**Not implemented yet.** `wss://` is refused by name at dial time with a
+typed `SchemeUnavailable` error rather than quietly falling back to plaintext
+`ws://` — a scheme that promises encryption must never hand back a connection
+without it. `ws://` is unaffected.
+
+The work is smaller than it looks (rustls is already in the tree via
+`webrtc`, and `tokio-tungstenite` already has the plumbing), but it carries
+decisions — root store, verification policy, and whether `wss` reports peer
+identity — that should be settled first. See [`docs/tls.md`](docs/tls.md).
 
 ### NAT traversal, end to end
 
