@@ -94,6 +94,8 @@ type DataChannelCallbacks = (
 
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 pub struct RtcBrowser {
+    /// Retains the tail of a message too large for the caller's buffer.
+    pending: crate::transport::message_buffer::MessageBuffer,
     /// The underlying RTCPeerConnection. Kept alive for the duration of the
     /// connection — dropping it tears down the ICE agent and data channel.
     _pc: RtcPeerConnection,
@@ -309,6 +311,7 @@ impl RtcBrowser {
 
             // Signal transport is dropped here — signaling is done
             return Ok(Self {
+                pending: Default::default(),
                 _pc: pc,
                 dc,
                 rx: dc_data_rx,
@@ -347,6 +350,7 @@ impl RtcBrowser {
 
         // Signaling transport dropped — direct P2P from here
         Ok(Self {
+            pending: Default::default(),
             _pc: pc,
             dc,
             rx: dc_data_rx,
@@ -383,13 +387,17 @@ impl Transport for RtcBrowser {
     }
 
     async fn recv(&mut self, buf: &mut [u8]) -> Result<usize, TransportError> {
+        // Hand back the tail of a previous message before taking a new one,
+        // or bytes would be delivered out of order.
+        if self.pending.has_pending() {
+            return Ok(self.pending.drain_into(buf));
+        }
+
         let mut attempts = 0;
         loop {
             match self.rx.try_recv() {
                 Ok(data) => {
-                    let n = data.len().min(buf.len());
-                    buf[..n].copy_from_slice(&data[..n]);
-                    return Ok(n);
+                    return Ok(self.pending.deliver(&data, buf));
                 }
                 Err(mpsc::error::TryRecvError::Disconnected) => {
                     return Err(TransportError::Closed);

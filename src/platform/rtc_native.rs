@@ -99,6 +99,8 @@ const DATA_CHANNEL_LABEL: &str = "aloecraft";
 /// Created via `RtcNative::connect()`. Same interface as `RtcBrowser`.
 #[cfg(not(target_arch = "wasm32"))]
 pub struct RtcNative {
+    /// Retains the tail of a message too large for the caller's buffer.
+    pending: crate::transport::message_buffer::MessageBuffer,
     /// Keeps the peer connection alive — dropping it tears down ICE and the
     /// data channel — and is also what `path()` queries for the selected
     /// candidate pair.
@@ -284,6 +286,7 @@ impl RtcNative {
         let pc = Arc::new(pc);
 
         Ok(Self {
+            pending: Default::default(),
             pc,
             dc,
             rx: data_rx,
@@ -308,12 +311,13 @@ impl Transport for RtcNative {
     }
 
     async fn recv(&mut self, buf: &mut [u8]) -> Result<usize, TransportError> {
+        // Hand back the tail of a previous message before taking a new one,
+        // or bytes would be delivered out of order.
+        if self.pending.has_pending() {
+            return Ok(self.pending.drain_into(buf));
+        }
         match self.rx.recv().await {
-            Some(data) => {
-                let n = data.len().min(buf.len());
-                buf[..n].copy_from_slice(&data[..n]);
-                Ok(n)
-            }
+            Some(data) => Ok(self.pending.deliver(&data, buf)),
             None => Err(TransportError::Closed),
         }
     }

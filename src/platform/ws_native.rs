@@ -13,6 +13,8 @@ use futures::{SinkExt, StreamExt};
 
 #[cfg(not(target_arch = "wasm32"))]
 pub struct WebSocketNative {
+    /// Retains the tail of a message too large for the caller's buffer.
+    pending: crate::transport::message_buffer::MessageBuffer,
     stream: WebSocketStream<MaybeTlsStream<TcpStream>>,
     peer_addr: Option<std::net::SocketAddr>,
 }
@@ -36,6 +38,7 @@ impl WebSocketNative {
         log::info!("[WS Native] Connected successfully");
 
         Ok(Self {
+            pending: Default::default(),
             stream: ws_stream,
             peer_addr: None,
         })
@@ -58,6 +61,7 @@ impl WebSocketNative {
         log::info!("[WS Native] WebSocket handshake complete");
 
         Ok(Self {
+            pending: Default::default(),
             stream: ws_stream,
             peer_addr,
         })
@@ -87,6 +91,12 @@ impl Transport for WebSocketNative {
     async fn recv(&mut self, buf: &mut [u8]) -> Result<usize, TransportError> {
         log::debug!("[WS Native] Waiting for message");
 
+        // Hand back the tail of a previous message before taking a new one,
+        // or bytes would be delivered out of order.
+        if self.pending.has_pending() {
+            return Ok(self.pending.drain_into(buf));
+        }
+
         loop {
             match self.stream.next().await {
                 Some(Ok(message)) => {
@@ -96,16 +106,11 @@ impl Transport for WebSocketNative {
                                 "[WS Native] Received binary message ({} bytes)",
                                 data.len()
                             );
-                            let n = data.len().min(buf.len());
-                            buf[..n].copy_from_slice(&data[..n]);
-                            return Ok(n);
+                            return Ok(self.pending.deliver(&data, buf));
                         }
                         Message::Text(text) => {
                             log::debug!("[WS Native] Received text message ({} bytes)", text.len());
-                            let data = text.as_bytes();
-                            let n = data.len().min(buf.len());
-                            buf[..n].copy_from_slice(&data[..n]);
-                            return Ok(n);
+                            return Ok(self.pending.deliver(text.as_bytes(), buf));
                         }
                         Message::Ping(payload) => {
                             log::debug!("[WS Native] Received ping, sending pong");

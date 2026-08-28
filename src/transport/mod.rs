@@ -1,5 +1,6 @@
 pub mod bridge;
 mod buffered;
+pub(crate) mod message_buffer;
 pub mod p2p;
 pub mod rtc_signaling;
 pub mod signaling_hub;
