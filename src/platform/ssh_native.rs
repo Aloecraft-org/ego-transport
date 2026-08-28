@@ -793,28 +793,76 @@ impl SshClientConnection {
     /// error: [`SshError::HostKeyMismatch`] names the key the server offered,
     /// [`SshError::AuthRejected`] names the refused user.
     pub async fn connect(addr: &str, config: SshClientConfig) -> Result<Self, TransportError> {
+        let (russh_config, handler, observed) = Self::prepare(&config);
+        let handle = russh::client::connect(russh_config, addr, handler)
+            .await
+            .map_err(|e| Self::dial_error(e, &observed))?;
+        Self::authenticate(handle, config, observed).await
+    }
+
+    /// Run SSH over a stream the caller already has, instead of dialing an
+    /// address.
+    ///
+    /// The stream can be anything that reads and writes bytes — a tunnel, a
+    /// forwarded channel, a connection this crate handed back — so SSH can
+    /// ride over a path that was established by other means. Host-key
+    /// verification and authentication are identical to
+    /// [`connect`](Self::connect); only who opened the socket differs.
+    pub async fn connect_over_stream<S>(
+        stream: S,
+        config: SshClientConfig,
+    ) -> Result<Self, TransportError>
+    where
+        S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
+    {
+        let (russh_config, handler, observed) = Self::prepare(&config);
+        let handle = russh::client::connect_stream(russh_config, stream, handler)
+            .await
+            .map_err(|e| Self::dial_error(e, &observed))?;
+        Self::authenticate(handle, config, observed).await
+    }
+
+    /// The pieces both entry points need: negotiated suite, the handler that
+    /// checks the host key, and the slot it records the offered key into.
+    fn prepare(
+        config: &SshClientConfig,
+    ) -> (
+        Arc<russh::client::Config>,
+        ClientHandler,
+        Arc<std::sync::Mutex<Option<KeyIdentity>>>,
+    ) {
         let russh_config = Arc::new(russh::client::Config {
             preferred: modern_preferred(),
             inactivity_timeout: config.inactivity_timeout,
             ..Default::default()
         });
-
         let observed = Arc::new(std::sync::Mutex::new(None));
         let handler = ClientHandler {
-            verification: config.host_verification,
+            verification: config.host_verification.clone(),
             observed_tx: None,
             observed: observed.clone(),
         };
+        (russh_config, handler, observed)
+    }
 
-        let mut handle = russh::client::connect(russh_config, addr, handler)
-            .await
-            .map_err(|e| match e {
-                russh::Error::UnknownKey => TransportError::Ssh(SshError::HostKeyMismatch {
-                    offered: observed.lock().unwrap().clone(),
-                }),
-                other => ssh_err(other),
-            })?;
+    /// A refused host key names the key that was actually offered.
+    fn dial_error(
+        e: russh::Error,
+        observed: &Arc<std::sync::Mutex<Option<KeyIdentity>>>,
+    ) -> TransportError {
+        match e {
+            russh::Error::UnknownKey => TransportError::Ssh(SshError::HostKeyMismatch {
+                offered: observed.lock().unwrap().clone(),
+            }),
+            other => ssh_err(other),
+        }
+    }
 
+    async fn authenticate(
+        mut handle: russh::client::Handle<ClientHandler>,
+        config: SshClientConfig,
+        observed: Arc<std::sync::Mutex<Option<KeyIdentity>>>,
+    ) -> Result<Self, TransportError> {
         let auth = handle
             .authenticate_publickey(
                 config.user.clone(),

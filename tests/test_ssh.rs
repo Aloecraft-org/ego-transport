@@ -249,3 +249,80 @@ async fn accept_any_host_key_is_an_explicit_opt_in_that_still_surfaces_identity(
     .unwrap();
     assert_eq!(conn.host_identity().fingerprint_sha256, host_fp);
 }
+
+#[tokio::test]
+async fn ssh_runs_over_a_caller_supplied_stream() {
+    let host_key = generate_ed25519();
+    let host_pub = host_key.public_key().clone();
+    let client_key = generate_ed25519();
+    let client_fp = key_identity(&client_key.public_key().clone()).fingerprint_sha256;
+
+    let (listener, addr) = bind_server(SshServerConfig::new(host_key)).await;
+
+    let server = tokio::spawn(async move {
+        let mut conn = listener.accept().await.unwrap();
+        let fp = conn.identity().fingerprint().map(str::to_owned);
+        let channel = conn.next_channel().await.unwrap();
+        let mut framed = FramedTransport::new(channel);
+        while let Ok(frame) = framed.recv_frame().await {
+            framed.send_frame(&frame).await.unwrap();
+        }
+        fp
+    });
+
+    // The caller opens the socket; ego-transport only speaks SSH over it.
+    // This is what lets SSH ride a tunnel it did not establish itself.
+    let stream = tokio::net::TcpStream::connect(&addr).await.unwrap();
+    let conn = SshClientConnection::connect_over_stream(
+        stream,
+        client_config(client_key, HostKeyVerification::Keys(vec![host_pub])),
+    )
+    .await
+    .unwrap();
+
+    // Host-key verification and the principal work exactly as when dialing.
+    assert!(
+        conn.host_identity()
+            .fingerprint_sha256
+            .starts_with("SHA256:")
+    );
+
+    let channel = conn.open_subsystem("frames").await.unwrap();
+    let mut framed = FramedTransport::new(channel);
+    framed.send_frame(b"over a borrowed stream").await.unwrap();
+    assert_eq!(
+        framed.recv_frame().await.unwrap(),
+        b"over a borrowed stream"
+    );
+
+    conn.disconnect().await.unwrap();
+    assert_eq!(server.await.unwrap().as_deref(), Some(client_fp.as_str()));
+}
+
+#[tokio::test]
+async fn a_wrong_host_key_is_refused_over_a_supplied_stream_too() {
+    let host_key = generate_ed25519();
+    let real_fp = key_identity(&host_key.public_key().clone()).fingerprint_sha256;
+    let (_listener, addr) = bind_server(SshServerConfig::new(host_key)).await;
+
+    let unrelated = generate_ed25519().public_key().clone();
+    let stream = tokio::net::TcpStream::connect(&addr).await.unwrap();
+    let err = match SshClientConnection::connect_over_stream(
+        stream,
+        client_config(
+            generate_ed25519(),
+            HostKeyVerification::Keys(vec![unrelated]),
+        ),
+    )
+    .await
+    {
+        Ok(_) => panic!("expected host key mismatch"),
+        Err(e) => e,
+    };
+    match err {
+        TransportError::Ssh(SshError::HostKeyMismatch { offered }) => {
+            assert_eq!(offered.unwrap().fingerprint_sha256, real_fp);
+        }
+        other => panic!("expected HostKeyMismatch, got {other:?}"),
+    }
+}
