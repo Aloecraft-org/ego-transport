@@ -54,7 +54,7 @@ tungstenite = { version = "0.24", features = ["handshake"] }
 # Pinned: the bindgen ABI is unstable and must match the wasm-bindgen-cli /
 # wasm-bindgen-test-runner version installed in the devcontainer and CI
 # (ego_platform pins the same version).
-wasm-bindgen = "=0.2.114"
+wasm-bindgen = "=0.2.127"
 wasm-bindgen-futures = "0.4"
 console_error_panic_hook = "0.1"
 js-sys = "0.3"

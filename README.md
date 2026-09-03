@@ -142,7 +142,7 @@ The three pieces above are one ladder, and every rung can be self-hosted:
 - WASI test runtime: [wasmtime](https://wasmtime.dev/) (configured as the
   cargo runner in `.cargo/config.toml`)
 - Browser tests: `wasm-bindgen-cli` **matching the `wasm-bindgen` version in
-  `Cargo.lock`** (currently 0.2.114) plus a browser + webdriver
+  `Cargo.lock`** (currently 0.2.127) plus a browser + webdriver
 - Browser demos: [trunk](https://trunkrs.dev/) to serve
   `test_websocket_browser.html` / `test_rtc_browser.html`
 
