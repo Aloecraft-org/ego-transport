@@ -32,7 +32,16 @@ tungstenite = { version = "0.24", default-features = false }
 env_logger = "0.11"
 webrtc = "0.17"
 bytes = "1"
-russh = "0.63"
+# SSH, on russh's `ring` backend rather than its default `aws-lc-rs`. ring is
+# already in the tree (webrtc's DTLS, stun/turn, the TURN credential HMAC
+# below); aws-lc-rs would add a second crypto stack through aws-lc-sys, a
+# native AWS-LC build that costs every consumer a per-target C toolchain
+# (cmake, plus NASM on x86_64-pc-windows-gnu). The suite ssh_native.rs speaks
+# (curve25519 kex, ed25519 keys, chacha20-poly1305) is all on the ring path.
+# The feature list is russh's defaults minus that backend. Features are
+# additive, so CI guards against aws-lc-sys coming back through another
+# crate's feature.
+russh = { version = "0.63", default-features = false, features = ["ring", "flate2", "rsa"] }
 rand = { version = "0.10", features = ["thread_rng"] }
 # TURN relay. The protocol has HMAC auth, allocation lifecycles, permissions
 # and channel framing — stateful machinery where a bug means an open relay —
