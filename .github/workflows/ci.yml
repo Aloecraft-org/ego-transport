@@ -54,6 +54,23 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: Swatinem/rust-cache@v2
+      # russh is on the ring backend (see Cargo.toml). Cargo features are
+      # additive, so any crate in the graph enabling russh's `aws-lc-rs` would
+      # quietly bring aws-lc-sys, and its cmake/NASM toolchain tax, back for
+      # every consumer. `--target all` so a regression on any target counts,
+      # which is why one runner is enough. The grep rather than a bare
+      # `! cargo tree -i aws-lc-sys` so a cargo failure cannot pass as "absent".
+      - name: Guard against aws-lc-sys in the dependency tree
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          tree=$(cargo tree --target all --prefix none --format '{p}')
+          if grep -q '^aws-lc-sys ' <<< "$tree"; then
+            cargo tree -i aws-lc-sys --target all
+            echo "::error::aws-lc-sys is back in the dependency tree; russh must stay on the ring backend (see Cargo.toml)"
+            exit 1
+          fi
+          echo "aws-lc-sys is not in the dependency tree for any target"
       # Same commands as `make build_native` / `make test_native`
       # (invoked directly because GNU make isn't on the Windows runners).
       - name: Build
