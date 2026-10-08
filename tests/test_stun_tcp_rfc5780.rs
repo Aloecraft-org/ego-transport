@@ -322,11 +322,16 @@ async fn tcp_closes_on_junk() {
 
 #[tokio::test]
 async fn tcp_probe_against_a_closed_port_fails() {
-    // Port 1 on loopback refuses.
+    // Port 1 on loopback refuses. Linux and macOS report the refusal at
+    // once; Windows retries a refused connect for about two seconds, so
+    // within this test's short budget it surfaces as a timeout instead.
     let err = probe_tcp("127.0.0.1:1", &config("127.0.0.1:0"))
         .await
         .unwrap_err();
-    assert!(matches!(err, StunError::Io(_)), "got {err:?}");
+    assert!(
+        matches!(err, StunError::Io(_) | StunError::Timeout { .. }),
+        "got {err:?}"
+    );
 }
 
 // ---------------------------------------------------------------------------
