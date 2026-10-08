@@ -37,7 +37,7 @@ pub trait Transport: Send + Sync {
 | WebRTC data channel | `webrtc` crate | relay fallback over the signaling channel | `RtcPeerConnection` |
 | SSH client | `russh` | — (typed refusal) | — (typed refusal) |
 | SSH server | `russh` | — (typed refusal) | — (typed refusal) |
-| STUN probe / server | hand-rolled codec over UDP | — (typed refusal) | — (typed refusal) |
+| STUN probe / server | hand-rolled codec over UDP and TCP | — (typed refusal) | — (typed refusal) |
 | TURN relay server | `turn` crate | — | — (a browser consumes a relay via ICE, it cannot run one) |
 
 ### The `ssh` scheme
@@ -87,12 +87,18 @@ Supporting pieces:
   `platform::server::IdentifiedListener` surfacing
   (transport, identity, remote address) per accept
 - **`stun`** — RFC 5389 binding subset for hole punching: `stun::probe`
-  learns a socket's server-reflexive address, `stun::detect_mapping` probes
+  learns a socket's server-reflexive address (`stun::probe_tcp` the same
+  over TCP), `stun::detect_mapping` probes
   several servers from one socket to classify the NAT
   (endpoint-independent → punchable, endpoint-dependent → relay required),
   and `stun::StunServer` answers binding requests so any node can serve
   address discovery for its peers instead of depending on a public STUN
-  service (`IceServerConfig::stun` points the WebRTC scheme at it)
+  service (`IceServerConfig::stun` points the WebRTC scheme at it).
+  `StunServer::bind_with` adds STUN over TCP on the same port and the
+  RFC 5780 parts: OTHER-ADDRESS, RESPONSE-ORIGIN, and CHANGE-REQUEST answered
+  from an alternate port or handed to a `ChangeHandler` that asks the peer
+  server to answer with `answer_for`. `stun::detect_filtering` uses those to
+  classify the NAT's filtering
 - **`turn`** (native) — the relay for peers that cannot punch a direct path,
   built on the `turn` crate. `turn::TurnServer` enforces a hard allocation
   cap (refusals, never queueing), reports live allocations with their
@@ -125,7 +131,8 @@ identity — that should be settled first. See [`docs/tls.md`](docs/tls.md).
 The three pieces above are one ladder, and every rung can be self-hosted:
 
 1. `stun::detect_mapping` learns the reflexive address and whether the NAT
-   assigns one mapping or one per destination.
+   assigns one mapping or one per destination; `stun::detect_filtering`
+   learns whether it lets in packets from addresses it has not sent to.
 2. If it is endpoint-independent, a direct hole-punched path is viable, and
    the reflexive address is what a peer aims at.
 3. If it is endpoint-dependent (symmetric), punching cannot work: peers fall
@@ -203,7 +210,7 @@ src/
 │   ├── ws_native.rs / ws_wasi.rs / ws_browser.rs
 │   ├── rtc_native.rs / rtc_wasi.rs / rtc_browser.rs
 │   ├── ssh_native.rs    # ssh scheme: russh client + server (native)
-│   ├── stun_native.rs   # STUN probe + binding server over UDP (native)
+│   ├── stun_native.rs   # STUN probe, filtering, binding server, UDP + TCP (native)
 │   ├── turn_native.rs   # TURN relay server: auth, quota, metrics (native)
 │   ├── server.rs        # ServerBuilder, Listener, AutoDetectListener
 │   └── wasi_sync_adapter.rs
