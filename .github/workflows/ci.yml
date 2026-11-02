@@ -1,8 +1,10 @@
 name: CI
 
 on:
+  # Push on `main` only: a pull request's commits are checked by its
+  # `pull_request` run, and a push trigger on `claude/**` ran them twice.
   push:
-    branches: [main, "claude/**"]
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
